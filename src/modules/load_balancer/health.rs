@@ -184,8 +184,7 @@ impl HealthCheck {
             Ok(())
         } else {
             Err(format!(
-                "unexpected status code: {}, expected one of {:?}",
-                status_code, expected_status
+                "unexpected status code: {status_code}, expected one of {expected_status:?}"
             ))
         }
     }
@@ -280,7 +279,7 @@ impl HealthCheckTask {
                     debug!("Health check task shutting down");
                     break;
                 }
-                _ = tokio::time::sleep(interval) => {
+                () = tokio::time::sleep(interval) => {
                     let backends = self.backends.read().await;
                     let results = self.health_check.check_all(&backends).await;
 

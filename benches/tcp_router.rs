@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for TCP Router module.
 //!
 //! Tests: Connection pool stats, route config construction, listener stats.

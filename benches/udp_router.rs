@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for UDP Router module.
 //!
 //! Tests: Session creation/lookup/cleanup, datagram forwarding stats,

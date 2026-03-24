@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for Metrics Collector, Tracing, and Logging modules.
 //!
 //! Tests: Metric registration/recording, Prometheus export, span creation,

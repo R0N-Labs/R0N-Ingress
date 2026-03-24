@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for R0N-Ingress performance internals.
 //!
 //! Tests: MemoryPool, BufferPool (tiered allocation), Arena/Slab allocators,

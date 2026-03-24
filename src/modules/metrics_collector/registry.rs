@@ -131,6 +131,14 @@ impl ModuleMetrics {
     }
 
     /// Register a counter metric.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric name is invalid or already exists.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn register_counter(&self, desc: MetricDescriptor) -> MetricsResult<()> {
         let name = desc.name.clone();
         validate_metric_name(&name)?;
@@ -148,6 +156,14 @@ impl ModuleMetrics {
     }
 
     /// Register a gauge metric.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric name is invalid or already exists.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn register_gauge(&self, desc: MetricDescriptor) -> MetricsResult<()> {
         let name = desc.name.clone();
         validate_metric_name(&name)?;
@@ -165,6 +181,14 @@ impl ModuleMetrics {
     }
 
     /// Register a histogram metric with custom buckets.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric name is invalid or already exists.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn register_histogram(&self, desc: MetricDescriptor, buckets: &[f64]) -> MetricsResult<()> {
         let name = desc.name.clone();
         validate_metric_name(&name)?;
@@ -183,6 +207,14 @@ impl ModuleMetrics {
     }
 
     /// Increment a counter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric is not found.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn inc_counter(&self, name: &str) -> MetricsResult<()> {
         let counters = self.counters.read().expect("counters lock poisoned");
         let counter = counters
@@ -193,6 +225,14 @@ impl ModuleMetrics {
     }
 
     /// Add to a counter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric is not found.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn add_counter(&self, name: &str, value: u64) -> MetricsResult<()> {
         let counters = self.counters.read().expect("counters lock poisoned");
         let counter = counters
@@ -203,6 +243,14 @@ impl ModuleMetrics {
     }
 
     /// Set a gauge value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric is not found.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn set_gauge(&self, name: &str, value: f64) -> MetricsResult<()> {
         let gauges = self.gauges.read().expect("gauges lock poisoned");
         let gauge = gauges
@@ -213,6 +261,14 @@ impl ModuleMetrics {
     }
 
     /// Increment a gauge.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric is not found.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn inc_gauge(&self, name: &str) -> MetricsResult<()> {
         let gauges = self.gauges.read().expect("gauges lock poisoned");
         let gauge = gauges
@@ -223,6 +279,14 @@ impl ModuleMetrics {
     }
 
     /// Decrement a gauge.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric is not found.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn dec_gauge(&self, name: &str) -> MetricsResult<()> {
         let gauges = self.gauges.read().expect("gauges lock poisoned");
         let gauge = gauges
@@ -233,6 +297,14 @@ impl ModuleMetrics {
     }
 
     /// Observe a histogram value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metric is not found.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn observe_histogram(&self, name: &str, value: f64) -> MetricsResult<()> {
         let histograms = self.histograms.read().expect("histograms lock poisoned");
         let histogram = histograms
@@ -243,6 +315,10 @@ impl ModuleMetrics {
     }
 
     /// Get the current value of a counter.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn get_counter(&self, name: &str) -> Option<u64> {
         let counters = self.counters.read().expect("counters lock poisoned");
@@ -250,13 +326,23 @@ impl ModuleMetrics {
     }
 
     /// Get the current value of a gauge.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn get_gauge(&self, name: &str) -> Option<f64> {
         let gauges = self.gauges.read().expect("gauges lock poisoned");
-        gauges.get(name).map(|g| g.get())
+        gauges
+            .get(name)
+            .map(prometheus_client::metrics::gauge::Gauge::get)
     }
 
     /// Get all metric descriptors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn descriptors(&self) -> Vec<MetricDescriptor> {
         let descriptors = self.descriptors.read().expect("descriptors lock poisoned");
@@ -264,6 +350,10 @@ impl ModuleMetrics {
     }
 
     /// Get the number of registered metrics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn metric_count(&self) -> usize {
         let descriptors = self.descriptors.read().expect("descriptors lock poisoned");
@@ -300,14 +390,21 @@ impl MetricsRegistry {
     }
 
     /// Register a module.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module is already registered.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn register_module(&self, name: impl Into<String>) -> MetricsResult<Arc<ModuleMetrics>> {
         let name = name.into();
         let mut modules = self.modules.write().expect("modules lock poisoned");
 
         if modules.contains_key(&name) {
             return Err(MetricsError::ModuleNotFound(format!(
-                "Module {} already registered",
-                name
+                "Module {name} already registered"
             )));
         }
 
@@ -317,6 +414,10 @@ impl MetricsRegistry {
     }
 
     /// Get a module's metrics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn get_module(&self, name: &str) -> Option<Arc<ModuleMetrics>> {
         let modules = self.modules.read().expect("modules lock poisoned");
@@ -324,6 +425,14 @@ impl MetricsRegistry {
     }
 
     /// Unregister a module.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module is not found.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn unregister_module(&self, name: &str) -> MetricsResult<()> {
         let mut modules = self.modules.write().expect("modules lock poisoned");
         modules
@@ -333,6 +442,10 @@ impl MetricsRegistry {
     }
 
     /// Get all registered module names.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn module_names(&self) -> Vec<String> {
         let modules = self.modules.read().expect("modules lock poisoned");
@@ -340,6 +453,10 @@ impl MetricsRegistry {
     }
 
     /// Get the total number of metrics across all modules.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn total_metric_count(&self) -> usize {
         let modules = self.modules.read().expect("modules lock poisoned");
@@ -353,8 +470,13 @@ impl MetricsRegistry {
     }
 
     /// Encode all metrics in Prometheus text format.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any internal lock is poisoned.
     #[must_use]
     pub fn encode_prometheus(&self) -> String {
+        use std::fmt::Write;
         let modules = self.modules.read().expect("modules lock poisoned");
         let mut output = String::new();
 
@@ -370,21 +492,21 @@ impl MetricsRegistry {
 
             for (name, counter) in counters.iter() {
                 if let Some(desc) = descriptors.get(name) {
-                    output.push_str(&format!("# HELP {}_{} {}\n", prefix, name, desc.help));
-                    output.push_str(&format!("# TYPE {}_{} counter\n", prefix, name));
+                    let _ = writeln!(output, "# HELP {prefix}_{name} {}", desc.help);
+                    let _ = writeln!(output, "# TYPE {prefix}_{name} counter");
                 }
-                output.push_str(&format!("{}_{} {}\n", prefix, name, counter.get()));
+                let _ = writeln!(output, "{prefix}_{name} {}", counter.get());
             }
 
             // Encode gauges
             let gauges = module.gauges.read().expect("gauges lock poisoned");
             for (name, gauge) in gauges.iter() {
                 if let Some(desc) = descriptors.get(name) {
-                    output.push_str(&format!("# HELP {}_{} {}\n", prefix, name, desc.help));
-                    output.push_str(&format!("# TYPE {}_{} gauge\n", prefix, name));
+                    let _ = writeln!(output, "# HELP {prefix}_{name} {}", desc.help);
+                    let _ = writeln!(output, "# TYPE {prefix}_{name} gauge");
                 }
                 let value = gauge.get();
-                output.push_str(&format!("{}_{} {}\n", prefix, name, value));
+                let _ = writeln!(output, "{prefix}_{name} {value}");
             }
         }
 

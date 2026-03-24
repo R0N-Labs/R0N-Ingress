@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Concurrency Test Benchmark
 //!
 //! Tests the full proxy pipeline under concurrent load:

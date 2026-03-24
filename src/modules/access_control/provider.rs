@@ -144,6 +144,7 @@ impl AuthContext {
     }
 
     /// Extract Basic auth credentials.
+    #[must_use]
     pub fn extract_basic_auth(&self) -> Option<(String, String)> {
         let header = self.authorization_header.as_ref()?;
 
@@ -160,6 +161,7 @@ impl AuthContext {
     }
 
     /// Extract Bearer token.
+    #[must_use]
     pub fn extract_bearer_token(&self) -> Option<&str> {
         let header = self.authorization_header.as_ref()?;
 
@@ -180,54 +182,55 @@ impl AuthContext {
 fn base64_decode(input: &str) -> AccessControlResult<Vec<u8>> {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-    fn char_to_val(c: u8) -> Option<u8> {
-        ALPHABET.iter().position(|&x| x == c).map(|p| p as u8)
+    fn char_to_val(ch: u8) -> Option<u8> {
+        #[allow(clippy::cast_possible_truncation)]
+        ALPHABET.iter().position(|&x| x == ch).map(|p| p as u8)
     }
 
     let input = input.trim_end_matches('=');
     let mut output = Vec::with_capacity(input.len() * 3 / 4);
 
     let bytes = input.as_bytes();
-    let mut i = 0;
+    let mut idx = 0;
 
-    while i + 3 < bytes.len() {
-        let a = char_to_val(bytes[i]).ok_or_else(|| {
+    while idx + 3 < bytes.len() {
+        let b0 = char_to_val(bytes[idx]).ok_or_else(|| {
             AccessControlError::TokenError("Invalid base64 character".to_string())
         })?;
-        let b = char_to_val(bytes[i + 1]).ok_or_else(|| {
+        let b1 = char_to_val(bytes[idx + 1]).ok_or_else(|| {
             AccessControlError::TokenError("Invalid base64 character".to_string())
         })?;
-        let c = char_to_val(bytes[i + 2]).ok_or_else(|| {
+        let b2 = char_to_val(bytes[idx + 2]).ok_or_else(|| {
             AccessControlError::TokenError("Invalid base64 character".to_string())
         })?;
-        let d = char_to_val(bytes[i + 3]).ok_or_else(|| {
+        let b3 = char_to_val(bytes[idx + 3]).ok_or_else(|| {
             AccessControlError::TokenError("Invalid base64 character".to_string())
         })?;
 
-        output.push((a << 2) | (b >> 4));
-        output.push((b << 4) | (c >> 2));
-        output.push((c << 6) | d);
+        output.push((b0 << 2) | (b1 >> 4));
+        output.push((b1 << 4) | (b2 >> 2));
+        output.push((b2 << 6) | b3);
 
-        i += 4;
+        idx += 4;
     }
 
     // Handle remaining bytes
-    let remaining = bytes.len() - i;
+    let remaining = bytes.len() - idx;
     if remaining >= 2 {
-        let a = char_to_val(bytes[i]).ok_or_else(|| {
+        let b0 = char_to_val(bytes[idx]).ok_or_else(|| {
             AccessControlError::TokenError("Invalid base64 character".to_string())
         })?;
-        let b = char_to_val(bytes[i + 1]).ok_or_else(|| {
+        let b1 = char_to_val(bytes[idx + 1]).ok_or_else(|| {
             AccessControlError::TokenError("Invalid base64 character".to_string())
         })?;
 
-        output.push((a << 2) | (b >> 4));
+        output.push((b0 << 2) | (b1 >> 4));
 
         if remaining >= 3 {
-            let c = char_to_val(bytes[i + 2]).ok_or_else(|| {
+            let b2 = char_to_val(bytes[idx + 2]).ok_or_else(|| {
                 AccessControlError::TokenError("Invalid base64 character".to_string())
             })?;
-            output.push((b << 4) | (c >> 2));
+            output.push((b1 << 4) | (b2 >> 2));
         }
     }
 
@@ -237,6 +240,10 @@ fn base64_decode(input: &str) -> AccessControlResult<Vec<u8>> {
 /// Trait for authentication hooks.
 pub trait AuthHook: Send + Sync {
     /// Authenticate a request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if authentication fails or the credentials are invalid.
     fn authenticate(&self, context: &AuthContext) -> AccessControlResult<AuthResult>;
 
     /// Get the provider name.
@@ -272,7 +279,7 @@ impl BasicAuthProvider {
     /// Verify a password against a hash.
     ///
     /// Uses constant-time comparison to prevent timing side-channel attacks.
-    fn verify_password(&self, password: &str, hash: &str) -> bool {
+    fn verify_password(password: &str, hash: &str) -> bool {
         // Simple comparison - in production, use proper password hashing
         // This supports plain text (for testing) and simple hash prefix
         if let Some(plain) = hash.strip_prefix("plain:") {
@@ -286,15 +293,12 @@ impl BasicAuthProvider {
 
 impl AuthHook for BasicAuthProvider {
     fn authenticate(&self, context: &AuthContext) -> AccessControlResult<AuthResult> {
-        let (username, password) = match context.extract_basic_auth() {
-            Some(creds) => creds,
-            None => {
-                return Ok(AuthResult::failure("No Basic authentication credentials"));
-            },
+        let Some((username, password)) = context.extract_basic_auth() else {
+            return Ok(AuthResult::failure("No Basic authentication credentials"));
         };
 
         match self.users.get(&username) {
-            Some(hash) if self.verify_password(&password, hash) => {
+            Some(hash) if Self::verify_password(&password, hash) => {
                 Ok(AuthResult::success(&username))
             },
             Some(_) => Ok(AuthResult::failure("Invalid password")),
@@ -302,7 +306,7 @@ impl AuthHook for BasicAuthProvider {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "basic"
     }
 }
@@ -360,7 +364,7 @@ impl AuthHook for ApiKeyProvider {
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "api_key"
     }
 }
@@ -416,7 +420,7 @@ impl JwtProvider {
     }
 
     /// Parse a JWT token (simplified - extracts payload only).
-    fn parse_token(&self, token: &str) -> AccessControlResult<HashMap<String, String>> {
+    fn parse_token(token: &str) -> AccessControlResult<HashMap<String, String>> {
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() != 3 {
             return Err(AccessControlError::TokenError(
@@ -430,13 +434,13 @@ impl JwtProvider {
             .map_err(|_| AccessControlError::TokenError("Invalid UTF-8 in JWT".to_string()))?;
 
         // Simple JSON parsing (in production, use serde_json)
-        let claims = self.parse_simple_json(&payload_str)?;
+        let claims = Self::parse_simple_json(&payload_str)?;
 
         Ok(claims)
     }
 
     /// Very simple JSON parser for flat objects.
-    fn parse_simple_json(&self, json: &str) -> AccessControlResult<HashMap<String, String>> {
+    fn parse_simple_json(json: &str) -> AccessControlResult<HashMap<String, String>> {
         let mut claims = HashMap::new();
 
         // Remove braces and split by comma
@@ -464,13 +468,12 @@ impl JwtProvider {
 
 impl AuthHook for JwtProvider {
     fn authenticate(&self, context: &AuthContext) -> AccessControlResult<AuthResult> {
-        let token = match context.extract_bearer_token() {
-            Some(t) => t,
-            None => return Ok(AuthResult::failure("No Bearer token provided")),
+        let Some(token) = context.extract_bearer_token() else {
+            return Ok(AuthResult::failure("No Bearer token provided"));
         };
 
         // Parse the token
-        let claims = self.parse_token(token)?;
+        let claims = Self::parse_token(token)?;
 
         // Validate issuer
         if let Some(expected_iss) = &self.issuer {
@@ -505,7 +508,7 @@ impl AuthHook for JwtProvider {
         Ok(result)
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "jwt"
     }
 }
@@ -536,6 +539,10 @@ impl AuthManager {
     }
 
     /// Create from config.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any provider fails to initialize.
     pub fn from_providers(providers: &[AuthProvider], required: bool) -> AccessControlResult<Self> {
         let mut manager = Self::new(required);
 
@@ -575,6 +582,10 @@ impl AuthManager {
     }
 
     /// Authenticate a request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if authentication processing fails.
     pub fn authenticate(&self, context: &AuthContext) -> AccessControlResult<AuthResult> {
         for provider in &self.providers {
             let result = provider.authenticate(context)?;

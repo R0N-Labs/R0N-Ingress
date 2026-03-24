@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the Access Control module.
 //!
 //! Tests: IP filter check (CIDR matching), AllowList/DenyList lookup, cache performance,

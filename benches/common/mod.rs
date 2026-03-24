@@ -1,4 +1,4 @@
-#![allow(missing_docs, dead_code)]
+#![allow(missing_docs, dead_code, clippy::all, clippy::pedantic)]
 //! Shared benchmark support: data generators, harness utilities, reporting.
 
 pub mod generators;

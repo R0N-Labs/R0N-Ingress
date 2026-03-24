@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the Configuration system.
 //!
 //! Tests: TOML parsing, config loading, validation, schema generation,

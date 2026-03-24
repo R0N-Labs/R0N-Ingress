@@ -79,44 +79,40 @@ pub enum AcmeError {
 impl fmt::Display for AcmeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Config(msg) => write!(f, "ACME config error: {}", msg),
-            Self::Account(msg) => write!(f, "ACME account error: {}", msg),
-            Self::Order(msg) => write!(f, "ACME order error: {}", msg),
-            Self::Authorization(msg) => write!(f, "ACME authorization error: {}", msg),
+            Self::Config(msg) => write!(f, "ACME config error: {msg}"),
+            Self::Account(msg) => write!(f, "ACME account error: {msg}"),
+            Self::Order(msg) => write!(f, "ACME order error: {msg}"),
+            Self::Authorization(msg) => write!(f, "ACME authorization error: {msg}"),
             Self::Challenge {
                 challenge_type,
                 message,
             } => {
-                write!(f, "ACME {} challenge failed: {}", challenge_type, message)
+                write!(f, "ACME {challenge_type} challenge failed: {message}")
             },
-            Self::Certificate(msg) => write!(f, "ACME certificate error: {}", msg),
-            Self::Http(msg) => write!(f, "ACME HTTP error: {}", msg),
-            Self::Json(msg) => write!(f, "ACME JSON error: {}", msg),
-            Self::Crypto(msg) => write!(f, "ACME crypto error: {}", msg),
+            Self::Certificate(msg) => write!(f, "ACME certificate error: {msg}"),
+            Self::Http(msg) => write!(f, "ACME HTTP error: {msg}"),
+            Self::Json(msg) => write!(f, "ACME JSON error: {msg}"),
+            Self::Crypto(msg) => write!(f, "ACME crypto error: {msg}"),
             Self::RateLimited {
                 message,
                 retry_after,
             } => {
                 if let Some(secs) = retry_after {
-                    write!(
-                        f,
-                        "ACME rate limited: {} (retry after {} secs)",
-                        message, secs
-                    )
+                    write!(f, "ACME rate limited: {message} (retry after {secs} secs)")
                 } else {
-                    write!(f, "ACME rate limited: {}", message)
+                    write!(f, "ACME rate limited: {message}")
                 }
             },
-            Self::Storage(msg) => write!(f, "ACME storage error: {}", msg),
-            Self::Io(e) => write!(f, "ACME I/O error: {}", e),
-            Self::DomainValidation(msg) => write!(f, "Domain validation error: {}", msg),
+            Self::Storage(msg) => write!(f, "ACME storage error: {msg}"),
+            Self::Io(e) => write!(f, "ACME I/O error: {e}"),
+            Self::DomainValidation(msg) => write!(f, "Domain validation error: {msg}"),
             Self::CertificateExpired { domain, expired_at } => {
-                write!(f, "Certificate for {} expired at {}", domain, expired_at)
+                write!(f, "Certificate for {domain} expired at {expired_at}")
             },
-            Self::RenewalFailed(msg) => write!(f, "Certificate renewal failed: {}", msg),
-            Self::InvalidResponse(msg) => write!(f, "Invalid ACME response: {}", msg),
-            Self::Timeout(msg) => write!(f, "ACME timeout: {}", msg),
-            Self::Internal(msg) => write!(f, "ACME internal error: {}", msg),
+            Self::RenewalFailed(msg) => write!(f, "Certificate renewal failed: {msg}"),
+            Self::InvalidResponse(msg) => write!(f, "Invalid ACME response: {msg}"),
+            Self::Timeout(msg) => write!(f, "ACME timeout: {msg}"),
+            Self::Internal(msg) => write!(f, "ACME internal error: {msg}"),
         }
     }
 }
@@ -147,6 +143,7 @@ pub type AcmeResult<T> = Result<T, AcmeError>;
 
 impl AcmeError {
     /// Check if this error is retryable
+    #[must_use]
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -155,11 +152,13 @@ impl AcmeError {
     }
 
     /// Check if this is a rate limit error
+    #[must_use]
     pub fn is_rate_limited(&self) -> bool {
         matches!(self, Self::RateLimited { .. })
     }
 
     /// Get retry-after seconds if rate limited
+    #[must_use]
     pub fn retry_after(&self) -> Option<u64> {
         match self {
             Self::RateLimited { retry_after, .. } => *retry_after,

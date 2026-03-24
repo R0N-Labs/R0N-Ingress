@@ -1,7 +1,7 @@
 //! IPC (Inter-Process Communication) module for R0N Gateway.
 //!
 //! This module provides the communication layer between the R0N control plane
-//! and gateway modules using Unix sockets and MessagePack serialization.
+//! and gateway modules using Unix sockets and `MessagePack` serialization.
 //!
 //! Note: The client, server, and heartbeat components require Unix domain
 //! sockets and are only available on Unix platforms.

@@ -1,4 +1,4 @@
-//! Access control handler implementing ModuleContract.
+//! Access control handler implementing `ModuleContract`.
 
 use super::config::AccessControlConfig;
 use super::ip_filter::IpFilter;
@@ -229,6 +229,7 @@ impl std::fmt::Debug for AccessControlHandler {
             .field("policy_engine", &self.policy_engine.is_some())
             .field("status", &self.status)
             .field("stats", &self.stats)
+            .field("started_at", &self.started_at)
             .finish()
     }
 }
@@ -302,7 +303,7 @@ impl AccessControlHandler {
                     self.stats.record_check(false, DenialReason::Authentication);
                     return AccessCheckResult::deny(
                         DenialReason::Authentication,
-                        format!("Authentication error: {}", e),
+                        format!("Authentication error: {e}"),
                     );
                 },
             }
@@ -358,7 +359,7 @@ impl AccessControlHandler {
                     self.stats.record_check(false, DenialReason::Authorization);
                     return AccessCheckResult::deny(
                         DenialReason::Authorization,
-                        format!("Policy error: {}", e),
+                        format!("Policy error: {e}"),
                     );
                 },
             }
@@ -433,7 +434,7 @@ impl ModuleContract for AccessControlHandler {
         if let Some(ref ip_config) = self.config.ip_filter {
             if ip_config.enabled {
                 self.ip_filter = Some(IpFilter::new(ip_config.clone()).map_err(|e| {
-                    ModuleError::StartFailed(format!("Failed to create IP filter: {}", e))
+                    ModuleError::StartFailed(format!("Failed to create IP filter: {e}"))
                 })?);
                 debug!("IP filter initialized");
             }
@@ -445,10 +446,7 @@ impl ModuleContract for AccessControlHandler {
                 self.auth_manager = Some(
                     AuthManager::from_providers(&auth_config.providers, auth_config.required)
                         .map_err(|e| {
-                            ModuleError::StartFailed(format!(
-                                "Failed to create auth manager: {}",
-                                e
-                            ))
+                            ModuleError::StartFailed(format!("Failed to create auth manager: {e}"))
                         })?,
                 );
                 debug!("Auth manager initialized");

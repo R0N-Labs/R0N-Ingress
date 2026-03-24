@@ -91,11 +91,13 @@ pub enum DetectionMode {
 
 impl DetectionMode {
     /// Check if this mode should block requests
+    #[must_use]
     pub fn should_block(&self) -> bool {
         matches!(self, Self::Block)
     }
 
     /// Check if this mode should log threats
+    #[must_use]
     pub fn should_log(&self) -> bool {
         matches!(self, Self::Block | Self::Detect | Self::Log)
     }
@@ -160,6 +162,7 @@ pub enum RuleSeverity {
 
 impl RuleSeverity {
     /// Get numeric value for scoring
+    #[must_use]
     pub fn score(&self) -> u32 {
         match self {
             Self::Low => 1,
@@ -170,6 +173,7 @@ impl RuleSeverity {
     }
 
     /// Get display name
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Low => "low",
@@ -201,6 +205,7 @@ pub enum RuleAction {
 
 impl RuleAction {
     /// Check if this action blocks the request
+    #[must_use]
     pub fn is_blocking(&self) -> bool {
         matches!(self, Self::Block | Self::Drop)
     }
@@ -231,6 +236,7 @@ pub struct DetectorConfig {
 }
 
 /// SQL injection detector configuration
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SqlInjectionConfig {
     /// Whether enabled
@@ -276,6 +282,7 @@ impl Default for SqlInjectionConfig {
 }
 
 /// XSS detector configuration
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct XssConfig {
     /// Whether enabled
@@ -489,6 +496,7 @@ pub enum BypassOperator {
 }
 
 /// Threat logging configuration
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreatLogConfig {
     /// Whether logging is enabled

@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! CPU Saturation Curve Benchmark
 //!
 //! Sweeps concurrency levels (1 → 256 tasks) to find:

@@ -95,14 +95,12 @@ impl TokenBucket {
 
             let new_value = current - tokens_millis_needed;
 
-            match self.tokens_millis.compare_exchange_weak(
-                current,
-                new_value,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Ok(_) => return true,
-                Err(_) => continue, // Retry on contention
+            if self
+                .tokens_millis
+                .compare_exchange_weak(current, new_value, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                return true;
             }
         }
     }
@@ -126,6 +124,7 @@ impl TokenBucket {
 
     /// Get current token count.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn available_tokens(&self) -> f64 {
         self.refill();
         self.tokens_millis.load(Ordering::Acquire) as f64 / 1000.0
@@ -145,6 +144,7 @@ impl TokenBucket {
 
     /// Calculate time until the specified number of tokens is available.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn time_until_available(&self, tokens: u64) -> Duration {
         self.refill();
 
@@ -163,11 +163,13 @@ impl TokenBucket {
 
     /// Get the fill ratio (0.0 to 1.0).
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn fill_ratio(&self) -> f64 {
         self.available_tokens() / self.config.max_tokens as f64
     }
 
     /// Reset the bucket to full capacity.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn reset(&self) {
         self.tokens_millis
             .store(self.config.max_tokens * 1000, Ordering::Release);
@@ -178,6 +180,11 @@ impl TokenBucket {
     }
 
     /// Refill tokens based on elapsed time.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss
+    )]
     fn refill(&self) {
         let now_nanos = self.created_at.elapsed().as_nanos() as u64;
         let last_nanos = self.last_refill_nanos.load(Ordering::Acquire);
@@ -213,14 +220,12 @@ impl TokenBucket {
                 break;
             }
 
-            match self.tokens_millis.compare_exchange_weak(
-                current,
-                new_value,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Ok(_) => break,
-                Err(_) => continue,
+            if self
+                .tokens_millis
+                .compare_exchange_weak(current, new_value, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                break;
             }
         }
     }
@@ -281,6 +286,7 @@ impl SlidingWindowCounter {
     /// Try to record a request.
     ///
     /// Returns `true` if allowed, `false` if rate limited.
+    #[allow(clippy::cast_precision_loss)]
     pub fn try_record(&self) -> bool {
         self.maybe_rotate_window();
 
@@ -296,6 +302,7 @@ impl SlidingWindowCounter {
 
     /// Get the current weighted count.
     #[must_use]
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     pub fn weighted_count(&self) -> f64 {
         self.maybe_rotate_window();
 
@@ -315,6 +322,11 @@ impl SlidingWindowCounter {
 
     /// Get remaining requests in current window.
     #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     pub fn remaining(&self) -> u64 {
         let weighted = self.weighted_count();
         if weighted >= self.max_requests as f64 {
@@ -326,6 +338,7 @@ impl SlidingWindowCounter {
 
     /// Get time until window resets.
     #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn time_until_reset(&self) -> Duration {
         let now_nanos = self.created_at.elapsed().as_nanos() as u64;
         let window_start = self.window_start_nanos.load(Ordering::Acquire);
@@ -338,6 +351,7 @@ impl SlidingWindowCounter {
     }
 
     /// Rotate window if needed.
+    #[allow(clippy::cast_possible_truncation)]
     fn maybe_rotate_window(&self) {
         let now_nanos = self.created_at.elapsed().as_nanos() as u64;
         let window_start = self.window_start_nanos.load(Ordering::Acquire);
@@ -384,6 +398,7 @@ mod tests {
     use std::thread;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_token_bucket_creation() {
         let bucket = TokenBucket::with_rate(100, 10.0);
         assert_eq!(bucket.max_tokens(), 100);

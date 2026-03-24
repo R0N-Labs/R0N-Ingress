@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the WAF (Web Application Firewall) module.
 //!
 //! Tests: Rule engine scanning (SQLi, XSS, PathTraversal), detector throughput,

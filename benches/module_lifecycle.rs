@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the ModuleContract lifecycle across all modules.
 //!
 //! Tests: init, start, stop, pause, resume, heartbeat, metrics, reload latency.

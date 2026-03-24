@@ -136,7 +136,7 @@ impl Listener {
             total_accepted: self.total_accepted.load(Ordering::Relaxed),
             active_connections: self.active_connections.load(Ordering::Relaxed),
             accept_errors: self.accept_errors.load(Ordering::Relaxed),
-            uptime_seconds: self.started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0),
+            uptime_seconds: self.started_at.map_or(0, |t| t.elapsed().as_secs()),
         }
     }
 

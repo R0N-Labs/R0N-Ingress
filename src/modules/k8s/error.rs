@@ -50,7 +50,7 @@ pub enum K8sError {
     /// Secret decoding error
     SecretDecodeError(String),
 
-    /// ConfigMap error
+    /// `ConfigMap` error
     ConfigMapError(String),
 
     /// Ingress error
@@ -83,6 +83,7 @@ pub enum K8sError {
 
 impl K8sError {
     /// Check if error is retryable
+    #[must_use]
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -94,11 +95,13 @@ impl K8sError {
     }
 
     /// Check if error is a not found error
+    #[must_use]
     pub fn is_not_found(&self) -> bool {
         matches!(self, Self::NotFound { .. })
     }
 
     /// Check if error is an auth error
+    #[must_use]
     pub fn is_auth_error(&self) -> bool {
         matches!(
             self,
@@ -107,6 +110,7 @@ impl K8sError {
     }
 
     /// Get retry delay for rate limited errors
+    #[must_use]
     pub fn retry_after(&self) -> Option<u64> {
         if let Self::RateLimited { retry_after } = self {
             *retry_after
@@ -119,44 +123,44 @@ impl K8sError {
 impl fmt::Display for K8sError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ApiConnectionError(msg) => write!(f, "API connection error: {}", msg),
-            Self::AuthenticationError(msg) => write!(f, "authentication error: {}", msg),
-            Self::AuthorizationError(msg) => write!(f, "authorization error: {}", msg),
+            Self::ApiConnectionError(msg) => write!(f, "API connection error: {msg}"),
+            Self::AuthenticationError(msg) => write!(f, "authentication error: {msg}"),
+            Self::AuthorizationError(msg) => write!(f, "authorization error: {msg}"),
             Self::NotFound {
                 kind,
                 name,
                 namespace,
             } => {
                 if let Some(ns) = namespace {
-                    write!(f, "{} '{}' not found in namespace '{}'", kind, name, ns)
+                    write!(f, "{kind} '{name}' not found in namespace '{ns}'")
                 } else {
-                    write!(f, "{} '{}' not found", kind, name)
+                    write!(f, "{kind} '{name}' not found")
                 }
             },
             Self::AlreadyExists { kind, name } => {
-                write!(f, "{} '{}' already exists", kind, name)
+                write!(f, "{kind} '{name}' already exists")
             },
-            Self::InvalidResource(msg) => write!(f, "invalid resource: {}", msg),
-            Self::WatchError(msg) => write!(f, "watch error: {}", msg),
-            Self::SerializationError(msg) => write!(f, "serialization error: {}", msg),
-            Self::ConfigError(msg) => write!(f, "configuration error: {}", msg),
-            Self::NamespaceError(msg) => write!(f, "namespace error: {}", msg),
-            Self::SecretDecodeError(msg) => write!(f, "secret decode error: {}", msg),
-            Self::ConfigMapError(msg) => write!(f, "configmap error: {}", msg),
-            Self::IngressError(msg) => write!(f, "ingress error: {}", msg),
-            Self::ServiceError(msg) => write!(f, "service error: {}", msg),
-            Self::EndpointError(msg) => write!(f, "endpoint error: {}", msg),
-            Self::Timeout(msg) => write!(f, "timeout: {}", msg),
+            Self::InvalidResource(msg) => write!(f, "invalid resource: {msg}"),
+            Self::WatchError(msg) => write!(f, "watch error: {msg}"),
+            Self::SerializationError(msg) => write!(f, "serialization error: {msg}"),
+            Self::ConfigError(msg) => write!(f, "configuration error: {msg}"),
+            Self::NamespaceError(msg) => write!(f, "namespace error: {msg}"),
+            Self::SecretDecodeError(msg) => write!(f, "secret decode error: {msg}"),
+            Self::ConfigMapError(msg) => write!(f, "configmap error: {msg}"),
+            Self::IngressError(msg) => write!(f, "ingress error: {msg}"),
+            Self::ServiceError(msg) => write!(f, "service error: {msg}"),
+            Self::EndpointError(msg) => write!(f, "endpoint error: {msg}"),
+            Self::Timeout(msg) => write!(f, "timeout: {msg}"),
             Self::RateLimited { retry_after } => {
                 if let Some(secs) = retry_after {
-                    write!(f, "rate limited, retry after {} seconds", secs)
+                    write!(f, "rate limited, retry after {secs} seconds")
                 } else {
                     write!(f, "rate limited")
                 }
             },
-            Self::Conflict(msg) => write!(f, "conflict: {}", msg),
-            Self::Internal(msg) => write!(f, "internal error: {}", msg),
-            Self::Io(msg) => write!(f, "I/O error: {}", msg),
+            Self::Conflict(msg) => write!(f, "conflict: {msg}"),
+            Self::Internal(msg) => write!(f, "internal error: {msg}"),
+            Self::Io(msg) => write!(f, "I/O error: {msg}"),
         }
     }
 }
@@ -172,9 +176,10 @@ impl From<std::io::Error> for K8sError {
 /// Kubernetes result type
 pub type K8sResult<T> = Result<T, K8sError>;
 
-/// HTTP status code mapping to K8sError
+/// HTTP status code mapping to `K8sError`
 impl K8sError {
     /// Create error from HTTP status code
+    #[must_use]
     pub fn from_status_code(code: u16, message: String) -> Self {
         match code {
             401 => Self::AuthenticationError(message),
@@ -187,7 +192,7 @@ impl K8sError {
             409 => Self::Conflict(message),
             429 => Self::RateLimited { retry_after: None },
             500..=599 => Self::ApiConnectionError(message),
-            _ => Self::Internal(format!("HTTP {}: {}", code, message)),
+            _ => Self::Internal(format!("HTTP {code}: {message}")),
         }
     }
 }

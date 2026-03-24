@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the Load Balancer module.
 //!
 //! Tests: Strategy selection (round-robin, weighted, least-connections, hash, random),

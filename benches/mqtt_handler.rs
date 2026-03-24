@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the MQTT Handler module.
 //!
 //! Tests: Packet construction, topic matching (exact, single-level +, multi-level #),

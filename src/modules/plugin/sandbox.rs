@@ -24,7 +24,7 @@ fn normalize_path(path: &str) -> String {
     }
     let normalized = parts.join("/");
     if path.starts_with('/') {
-        format!("/{}", normalized)
+        format!("/{normalized}")
     } else {
         normalized
     }
@@ -43,51 +43,62 @@ pub struct SandboxConfig {
 
 impl SandboxConfig {
     /// Create a new sandbox configuration.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create with resource limits.
+    #[must_use]
     pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
         self.limits = limits;
         self
     }
 
     /// Create with security policy.
+    #[must_use]
     pub fn with_policy(mut self, policy: SandboxPolicy) -> Self {
         self.policy = policy;
         self
     }
 
     /// Add a capability.
+    #[must_use]
     pub fn add_capability(mut self, capability: Capability) -> Self {
         self.capabilities.insert(capability);
         self
     }
 
     /// Add multiple capabilities.
+    #[must_use]
     pub fn add_capabilities(mut self, capabilities: impl IntoIterator<Item = Capability>) -> Self {
         self.capabilities.extend(capabilities);
         self
     }
 
     /// Check if a capability is enabled.
+    #[must_use]
     pub fn has_capability(&self, capability: &Capability) -> bool {
         self.capabilities.contains(capability)
     }
 
     /// Validate a capability check.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the capability is not enabled.
     pub fn require_capability(&self, capability: &Capability) -> PluginResult<()> {
         if self.has_capability(capability) {
             Ok(())
         } else {
             Err(PluginError::CapabilityDenied {
-                capability: format!("{:?}", capability),
+                capability: format!("{capability:?}"),
             })
         }
     }
 
     /// Create a restrictive sandbox.
+    #[must_use]
     pub fn restrictive() -> Self {
         Self {
             limits: ResourceLimits::restrictive(),
@@ -97,6 +108,7 @@ impl SandboxConfig {
     }
 
     /// Create a permissive sandbox (for trusted plugins).
+    #[must_use]
     pub fn permissive() -> Self {
         let mut capabilities = HashSet::new();
         capabilities.insert(Capability::NetworkClient);
@@ -158,6 +170,7 @@ impl Default for ResourceLimits {
 
 impl ResourceLimits {
     /// Create restrictive limits.
+    #[must_use]
     pub fn restrictive() -> Self {
         Self {
             max_memory_bytes: 4 * 1024 * 1024, // 4 MB
@@ -174,6 +187,7 @@ impl ResourceLimits {
     }
 
     /// Create permissive limits.
+    #[must_use]
     pub fn permissive() -> Self {
         Self {
             max_memory_bytes: 256 * 1024 * 1024, // 256 MB
@@ -190,12 +204,20 @@ impl ResourceLimits {
     }
 
     /// Check if an invocation is allowed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rate limits are exceeded.
     pub fn check_invocation(&self) -> PluginResult<()> {
         // In a real implementation, this would check rate limits, etc.
         Ok(())
     }
 
     /// Check memory allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the allocation would exceed the memory limit.
     pub fn check_memory(&self, requested: u64, current: u64) -> PluginResult<()> {
         if current + requested > self.max_memory_bytes {
             Err(PluginError::ResourceLimitExceeded {
@@ -209,6 +231,10 @@ impl ResourceLimits {
     }
 
     /// Check fuel consumption.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if fuel has been exhausted.
     pub fn check_fuel(&self, consumed: u64) -> PluginResult<()> {
         if consumed > self.max_fuel {
             Err(PluginError::ResourceLimitExceeded {
@@ -222,6 +248,11 @@ impl ResourceLimits {
     }
 
     /// Check execution time.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the execution time limit is exceeded.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn check_execution_time(&self, elapsed: Duration) -> PluginResult<()> {
         if elapsed > self.max_execution_time {
             Err(PluginError::Timeout {
@@ -234,6 +265,7 @@ impl ResourceLimits {
 }
 
 /// Security policy for plugin execution.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct SandboxPolicy {
     /// Allow WASM SIMD instructions.
@@ -280,6 +312,7 @@ impl Default for SandboxPolicy {
 
 impl SandboxPolicy {
     /// Create a strict policy.
+    #[must_use]
     pub fn strict() -> Self {
         Self {
             allow_simd: false,
@@ -296,6 +329,7 @@ impl SandboxPolicy {
     }
 
     /// Create a permissive policy.
+    #[must_use]
     pub fn permissive() -> Self {
         let mut allowed_modules = HashSet::new();
         allowed_modules.insert("env".to_string());
@@ -317,27 +351,33 @@ impl SandboxPolicy {
     }
 
     /// Check if a module is allowed.
+    #[must_use]
     pub fn is_module_allowed(&self, module: &str) -> bool {
         self.allowed_modules.is_empty() || self.allowed_modules.contains(module)
     }
 
     /// Check if a function is denied.
+    #[must_use]
     pub fn is_function_denied(&self, function: &str) -> bool {
         self.denied_functions.contains(function)
     }
 
     /// Validate an import.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module or function is not allowed.
     pub fn validate_import(&self, module: &str, function: &str) -> PluginResult<()> {
         if !self.is_module_allowed(module) {
             return Err(PluginError::PolicyViolation {
-                policy: format!("module '{}' not allowed", module),
+                policy: format!("module '{module}' not allowed"),
                 action: "import".to_string(),
             });
         }
 
         if self.is_function_denied(function) {
             return Err(PluginError::PolicyViolation {
-                policy: format!("function '{}' denied", function),
+                policy: format!("function '{function}' denied"),
                 action: "import".to_string(),
             });
         }
@@ -378,6 +418,7 @@ impl Default for NetworkPolicy {
 
 impl NetworkPolicy {
     /// Deny all network access.
+    #[must_use]
     pub fn deny_all() -> Self {
         Self {
             allow_outbound: false,
@@ -386,6 +427,7 @@ impl NetworkPolicy {
     }
 
     /// Allow all network access.
+    #[must_use]
     pub fn allow_all() -> Self {
         Self {
             allow_outbound: true,
@@ -396,6 +438,7 @@ impl NetworkPolicy {
     }
 
     /// Check if a host is allowed.
+    #[must_use]
     pub fn is_host_allowed(&self, host: &str) -> bool {
         if !self.allow_outbound {
             return false;
@@ -409,11 +452,16 @@ impl NetworkPolicy {
     }
 
     /// Check if a port is allowed.
+    #[must_use]
     pub fn is_port_allowed(&self, port: u16) -> bool {
         self.allowed_ports.is_empty() || self.allowed_ports.contains(&port)
     }
 
     /// Validate a network request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the host, port, or rate limit is violated.
     pub fn validate_request(&self, host: &str, port: u16) -> PluginResult<()> {
         if !self.allow_outbound {
             return Err(PluginError::PolicyViolation {
@@ -424,14 +472,14 @@ impl NetworkPolicy {
 
         if !self.is_host_allowed(host) {
             return Err(PluginError::PolicyViolation {
-                policy: format!("host '{}' not allowed", host),
+                policy: format!("host '{host}' not allowed"),
                 action: "network_request".to_string(),
             });
         }
 
         if !self.is_port_allowed(port) {
             return Err(PluginError::PolicyViolation {
-                policy: format!("port {} not allowed", port),
+                policy: format!("port {port} not allowed"),
                 action: "network_request".to_string(),
             });
         }
@@ -466,6 +514,7 @@ impl Default for FilesystemPolicy {
 
 impl FilesystemPolicy {
     /// Deny all filesystem access.
+    #[must_use]
     pub fn deny_all() -> Self {
         Self::default()
     }
@@ -474,6 +523,7 @@ impl FilesystemPolicy {
     ///
     /// Normalizes the path to prevent traversal attacks before checking
     /// against the allowed read paths (prefix match).
+    #[must_use]
     pub fn can_read(&self, path: &str) -> bool {
         if !self.allow_access {
             return false;
@@ -491,6 +541,7 @@ impl FilesystemPolicy {
     ///
     /// Normalizes the path to prevent traversal attacks before checking
     /// against the allowed write paths (prefix match).
+    #[must_use]
     pub fn can_write(&self, path: &str) -> bool {
         if !self.allow_access {
             return false;
@@ -533,6 +584,7 @@ pub enum Capability {
 
 impl Capability {
     /// Get capability name.
+    #[must_use]
     pub fn name(&self) -> &str {
         match self {
             Self::NetworkClient => "network:client",
@@ -551,6 +603,7 @@ impl Capability {
     }
 
     /// Parse capability from string.
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "network:client" => Some(Self::NetworkClient),
@@ -584,6 +637,7 @@ pub struct SandboxEnforcer {
 
 impl SandboxEnforcer {
     /// Create a new enforcer.
+    #[must_use]
     pub fn new(config: SandboxConfig) -> Self {
         Self {
             config,
@@ -594,6 +648,10 @@ impl SandboxEnforcer {
     }
 
     /// Check and consume memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memory limit would be exceeded.
     pub fn allocate_memory(&mut self, bytes: u64) -> PluginResult<()> {
         self.config.limits.check_memory(bytes, self.memory_used)?;
         self.memory_used += bytes;
@@ -606,17 +664,29 @@ impl SandboxEnforcer {
     }
 
     /// Check and consume fuel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fuel limit is exceeded.
     pub fn consume_fuel(&mut self, fuel: u64) -> PluginResult<()> {
         self.fuel_consumed += fuel;
         self.config.limits.check_fuel(self.fuel_consumed)
     }
 
     /// Check capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the capability is not enabled.
     pub fn require_capability(&self, capability: &Capability) -> PluginResult<()> {
         self.config.require_capability(capability)
     }
 
     /// Validate network request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network request violates the sandbox policy.
     pub fn validate_network_request(&mut self, host: &str, port: u16) -> PluginResult<()> {
         self.config.require_capability(&Capability::NetworkClient)?;
         self.config
@@ -628,8 +698,8 @@ impl SandboxEnforcer {
         if self.request_count > self.config.policy.network_policy.max_requests_per_minute {
             return Err(PluginError::ResourceLimitExceeded {
                 resource: "requests_per_minute".to_string(),
-                limit: self.config.policy.network_policy.max_requests_per_minute as u64,
-                attempted: self.request_count as u64,
+                limit: u64::from(self.config.policy.network_policy.max_requests_per_minute),
+                attempted: u64::from(self.request_count),
             });
         }
 
@@ -637,11 +707,13 @@ impl SandboxEnforcer {
     }
 
     /// Get current memory usage.
+    #[must_use]
     pub fn memory_used(&self) -> u64 {
         self.memory_used
     }
 
     /// Get fuel consumed.
+    #[must_use]
     pub fn fuel_consumed(&self) -> u64 {
         self.fuel_consumed
     }

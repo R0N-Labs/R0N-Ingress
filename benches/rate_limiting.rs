@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the Rate Limiting module.
 //!
 //! Tests: TokenBucket throughput (lock-free atomics), RateLimiter check,

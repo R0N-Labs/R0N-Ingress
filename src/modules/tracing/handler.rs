@@ -1,7 +1,7 @@
 //! Tracing module handler
 
 use super::config::TracingConfig;
-use super::context::{SpanContext, TraceFlags};
+use super::context::{SpanContext, TraceFlags, TraceState};
 use super::error::{TracingError, TracingResult};
 use super::exporter::{create_exporter, BatchSpanProcessor, SpanExporter};
 use super::propagation::{CompositePropagator, Extractor, Injector, Propagator};
@@ -33,16 +33,16 @@ impl SpanRegistry {
         self.spans.insert(span.span_id, span);
     }
 
-    fn remove(&mut self, span_id: &SpanId) -> Option<Span> {
-        self.spans.remove(span_id)
+    fn remove(&mut self, span_id: SpanId) -> Option<Span> {
+        self.spans.remove(&span_id)
     }
 
-    fn get(&self, span_id: &SpanId) -> Option<&Span> {
-        self.spans.get(span_id)
+    fn get(&self, span_id: SpanId) -> Option<&Span> {
+        self.spans.get(&span_id)
     }
 
-    fn get_mut(&mut self, span_id: &SpanId) -> Option<&mut Span> {
-        self.spans.get_mut(span_id)
+    fn get_mut(&mut self, span_id: SpanId) -> Option<&mut Span> {
+        self.spans.get_mut(&span_id)
     }
 
     fn count(&self) -> usize {
@@ -112,6 +112,10 @@ impl Tracer {
     }
 
     /// Create and register a span
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span registry lock is poisoned.
     pub fn create_span(&self, name: impl Into<String>) -> TracingResult<SpanId> {
         let name = name.into();
         let trace_id = TraceId::generate();
@@ -119,6 +123,10 @@ impl Tracer {
     }
 
     /// Create a span with parent context
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span registry lock is poisoned.
     pub fn create_child_span(
         &self,
         name: impl Into<String>,
@@ -132,7 +140,7 @@ impl Tracer {
                 .registry
                 .lock()
                 .map_err(|_| TracingError::Internal("lock poisoned".to_string()))?;
-            registry.get(&parent_span_id).map(|s| s.trace_id)
+            registry.get(parent_span_id).map(|s| s.trace_id)
         };
 
         let trace_id = parent_trace_id.unwrap_or_else(TraceId::generate);
@@ -140,6 +148,10 @@ impl Tracer {
     }
 
     /// Create a span from extracted context
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span registry lock is poisoned.
     pub fn create_span_from_context(
         &self,
         name: impl Into<String>,
@@ -164,6 +176,7 @@ impl Tracer {
         self.create_span_with_trace_full(name, trace_id, parent_span_id, kind, false)
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn create_span_with_trace_full(
         &self,
         name: String,
@@ -175,7 +188,7 @@ impl Tracer {
         // Check sampling
         let parent_context = parent_span_id.and_then(|id| {
             self.registry.lock().ok().and_then(|reg| {
-                reg.get(&id).map(|s| SpanContext {
+                reg.get(id).map(|s| SpanContext {
                     trace_id: s.trace_id,
                     span_id: s.span_id,
                     trace_flags: if s.is_sampled {
@@ -183,7 +196,7 @@ impl Tracer {
                     } else {
                         TraceFlags::NONE
                     },
-                    trace_state: Default::default(),
+                    trace_state: TraceState::default(),
                     is_remote: is_remote_parent,
                 })
             })
@@ -239,6 +252,10 @@ impl Tracer {
     }
 
     /// End a span
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span is not found or exporting fails.
     pub fn end_span(&self, span_id: SpanId) -> TracingResult<()> {
         let span = {
             let mut registry = self
@@ -247,7 +264,7 @@ impl Tracer {
                 .map_err(|_| TracingError::Internal("lock poisoned".to_string()))?;
 
             let mut span = registry
-                .remove(&span_id)
+                .remove(span_id)
                 .ok_or(TracingError::SpanNotFound(span_id.to_hex()))?;
             span.end();
             span
@@ -266,6 +283,10 @@ impl Tracer {
     }
 
     /// Set an attribute on a span
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span is not found.
     pub fn set_attribute(
         &self,
         span_id: SpanId,
@@ -278,7 +299,7 @@ impl Tracer {
             .map_err(|_| TracingError::Internal("lock poisoned".to_string()))?;
 
         let span = registry
-            .get_mut(&span_id)
+            .get_mut(span_id)
             .ok_or(TracingError::SpanNotFound(span_id.to_hex()))?;
 
         span.set_attribute(key, value);
@@ -286,6 +307,10 @@ impl Tracer {
     }
 
     /// Add an event to a span
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span is not found.
     pub fn add_event(&self, span_id: SpanId, name: impl Into<String>) -> TracingResult<()> {
         let mut registry = self
             .registry
@@ -293,7 +318,7 @@ impl Tracer {
             .map_err(|_| TracingError::Internal("lock poisoned".to_string()))?;
 
         let span = registry
-            .get_mut(&span_id)
+            .get_mut(span_id)
             .ok_or(TracingError::SpanNotFound(span_id.to_hex()))?;
 
         span.add_event_simple(name);
@@ -301,6 +326,10 @@ impl Tracer {
     }
 
     /// Record an error on a span
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span is not found.
     pub fn record_error(&self, span_id: SpanId, error: &str) -> TracingResult<()> {
         let mut registry = self
             .registry
@@ -308,7 +337,7 @@ impl Tracer {
             .map_err(|_| TracingError::Internal("lock poisoned".to_string()))?;
 
         let span = registry
-            .get_mut(&span_id)
+            .get_mut(span_id)
             .ok_or(TracingError::SpanNotFound(span_id.to_hex()))?;
 
         span.set_error(error);
@@ -326,6 +355,10 @@ impl Tracer {
     }
 
     /// Get span context for a span
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the span is not found.
     pub fn get_span_context(&self, span_id: SpanId) -> TracingResult<SpanContext> {
         let registry = self
             .registry
@@ -333,7 +366,7 @@ impl Tracer {
             .map_err(|_| TracingError::Internal("lock poisoned".to_string()))?;
 
         let span = registry
-            .get(&span_id)
+            .get(span_id)
             .ok_or(TracingError::SpanNotFound(span_id.to_hex()))?;
 
         Ok(SpanContext {
@@ -344,17 +377,25 @@ impl Tracer {
             } else {
                 TraceFlags::NONE
             },
-            trace_state: Default::default(),
+            trace_state: TraceState::default(),
             is_remote: false,
         })
     }
 
     /// Flush pending spans
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing fails.
     pub fn flush(&self) -> TracingResult<()> {
         self.processor.flush()
     }
 
     /// Shutdown the tracer
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if shutdown fails.
     pub fn shutdown(&self) -> TracingResult<()> {
         self.processor.shutdown()
     }
@@ -389,7 +430,7 @@ pub struct TracerStats {
     pub pending_export: u64,
 }
 
-/// Tracing handler implementing ModuleContract
+/// Tracing handler implementing `ModuleContract`
 pub struct TracingHandler {
     /// Configuration
     config: TracingConfig,
@@ -403,6 +444,7 @@ pub struct TracingHandler {
 
 impl TracingHandler {
     /// Create a new tracing handler
+    #[must_use]
     pub fn new(config: TracingConfig) -> Self {
         Self {
             config,
@@ -412,11 +454,16 @@ impl TracingHandler {
     }
 
     /// Get the tracer
+    #[must_use]
     pub fn tracer(&self) -> Option<&Arc<Tracer>> {
         self.tracer.as_ref()
     }
 
     /// Start a span (convenience method)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tracer is not initialized.
     pub fn start_span(&self, name: impl Into<String>) -> TracingResult<SpanId> {
         let tracer = self
             .tracer
@@ -426,6 +473,10 @@ impl TracingHandler {
     }
 
     /// End a span (convenience method)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tracer is not initialized or the span is not found.
     pub fn end_span(&self, span_id: SpanId) -> TracingResult<()> {
         let tracer = self
             .tracer
@@ -515,9 +566,9 @@ impl ModuleContract for TracingHandler {
 
         // Shutdown tracer
         if let Some(tracer) = &self.tracer {
-            tracer.shutdown().map_err(|e| {
-                ModuleError::StopFailed(format!("Failed to shutdown tracer: {}", e))
-            })?;
+            tracer
+                .shutdown()
+                .map_err(|e| ModuleError::StopFailed(format!("Failed to shutdown tracer: {e}")))?;
         }
 
         self.tracer = None;

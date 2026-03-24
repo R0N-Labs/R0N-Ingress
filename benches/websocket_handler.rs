@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the WebSocket Handler module.
 //!
 //! Tests: Message construction, opcode handling, message serialization.

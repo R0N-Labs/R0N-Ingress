@@ -1,3 +1,4 @@
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmark reporting utilities.
 //!
 //! Produces structured summaries of benchmark results for CI/CD integration

@@ -187,7 +187,7 @@ style = { level = "warn", priority = -1 }
 complexity = { level = "warn", priority = -1 }
 
 # Pedantic (optional, stricter)
-# pedantic = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
 
 # Specific lint overrides
 module_name_repetitions = "allow"

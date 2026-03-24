@@ -16,11 +16,13 @@ pub struct TraceId {
 
 impl TraceId {
     /// Create a new trace ID from high and low parts
+    #[must_use]
     pub fn new(high: u64, low: u64) -> Self {
         Self { high, low }
     }
 
     /// Generate a random trace ID
+    #[allow(clippy::cast_possible_truncation)]
     pub fn generate() -> Self {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -49,26 +51,31 @@ impl TraceId {
     }
 
     /// Create an invalid (zero) trace ID
+    #[must_use]
     pub fn invalid() -> Self {
         Self { high: 0, low: 0 }
     }
 
     /// Check if this trace ID is valid (non-zero)
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         self.high != 0 || self.low != 0
     }
 
     /// Get the high 64 bits
+    #[must_use]
     pub fn high(&self) -> u64 {
         self.high
     }
 
     /// Get the low 64 bits
+    #[must_use]
     pub fn low(&self) -> u64 {
         self.low
     }
 
     /// Convert to bytes (big-endian)
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 16] {
         let mut bytes = [0u8; 16];
         bytes[..8].copy_from_slice(&self.high.to_be_bytes());
@@ -77,6 +84,11 @@ impl TraceId {
     }
 
     /// Create from bytes (big-endian)
+    ///
+    /// # Panics
+    ///
+    /// Panics if the byte slice conversion fails (should never happen with a 16-byte input).
+    #[must_use]
     pub fn from_bytes(bytes: &[u8; 16]) -> Self {
         let high = u64::from_be_bytes(bytes[..8].try_into().unwrap());
         let low = u64::from_be_bytes(bytes[8..].try_into().unwrap());
@@ -84,6 +96,10 @@ impl TraceId {
     }
 
     /// Parse from hex string (32 characters)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hex string is not exactly 32 characters or contains invalid hex.
     pub fn from_hex(hex: &str) -> TracingResult<Self> {
         if hex.len() != 32 {
             return Err(TracingError::InvalidTraceId(format!(
@@ -93,15 +109,16 @@ impl TraceId {
         }
 
         let high = u64::from_str_radix(&hex[..16], 16)
-            .map_err(|e| TracingError::InvalidTraceId(format!("invalid hex: {}", e)))?;
+            .map_err(|e| TracingError::InvalidTraceId(format!("invalid hex: {e}")))?;
 
         let low = u64::from_str_radix(&hex[16..], 16)
-            .map_err(|e| TracingError::InvalidTraceId(format!("invalid hex: {}", e)))?;
+            .map_err(|e| TracingError::InvalidTraceId(format!("invalid hex: {e}")))?;
 
         Ok(Self { high, low })
     }
 
     /// Convert to hex string (32 characters)
+    #[must_use]
     pub fn to_hex(&self) -> String {
         format!("{:016x}{:016x}", self.high, self.low)
     }
@@ -125,11 +142,13 @@ pub struct SpanId(u64);
 
 impl SpanId {
     /// Create a new span ID
+    #[must_use]
     pub fn new(id: u64) -> Self {
         Self(id)
     }
 
     /// Generate a random span ID
+    #[allow(clippy::cast_possible_truncation)]
     pub fn generate() -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -143,31 +162,40 @@ impl SpanId {
     }
 
     /// Create an invalid (zero) span ID
+    #[must_use]
     pub fn invalid() -> Self {
         Self(0)
     }
 
     /// Check if this span ID is valid (non-zero)
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         self.0 != 0
     }
 
     /// Get the raw value
+    #[must_use]
     pub fn value(&self) -> u64 {
         self.0
     }
 
     /// Convert to bytes (big-endian)
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 8] {
         self.0.to_be_bytes()
     }
 
     /// Create from bytes (big-endian)
+    #[must_use]
     pub fn from_bytes(bytes: &[u8; 8]) -> Self {
         Self(u64::from_be_bytes(*bytes))
     }
 
     /// Parse from hex string (16 characters)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hex string is not exactly 16 characters or contains invalid hex.
     pub fn from_hex(hex: &str) -> TracingResult<Self> {
         if hex.len() != 16 {
             return Err(TracingError::InvalidSpanId(format!(
@@ -177,12 +205,13 @@ impl SpanId {
         }
 
         let id = u64::from_str_radix(hex, 16)
-            .map_err(|e| TracingError::InvalidSpanId(format!("invalid hex: {}", e)))?;
+            .map_err(|e| TracingError::InvalidSpanId(format!("invalid hex: {e}")))?;
 
         Ok(Self(id))
     }
 
     /// Convert to hex string (16 characters)
+    #[must_use]
     pub fn to_hex(&self) -> String {
         format!("{:016x}", self.0)
     }
@@ -223,6 +252,7 @@ pub enum SpanKind {
 
 impl SpanKind {
     /// Parse from string
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
             "INTERNAL" => Some(Self::Internal),
@@ -262,6 +292,7 @@ pub struct SpanStatus {
 
 impl SpanStatus {
     /// Create an OK status
+    #[must_use]
     pub fn ok() -> Self {
         Self {
             code: StatusCode::Ok,
@@ -278,6 +309,7 @@ impl SpanStatus {
     }
 
     /// Create an unset status
+    #[must_use]
     pub fn unset() -> Self {
         Self::default()
     }
@@ -338,7 +370,7 @@ impl From<i64> for AttributeValue {
 
 impl From<i32> for AttributeValue {
     fn from(i: i32) -> Self {
-        Self::Int(i as i64)
+        Self::Int(i64::from(i))
     }
 }
 
@@ -372,6 +404,7 @@ impl SpanEvent {
     }
 
     /// Add an attribute
+    #[must_use]
     pub fn with_attribute(
         mut self,
         key: impl Into<String>,
@@ -397,6 +430,7 @@ pub struct SpanLink {
 
 impl SpanLink {
     /// Create a new link
+    #[must_use]
     pub fn new(trace_id: TraceId, span_id: SpanId) -> Self {
         Self {
             trace_id,
@@ -406,6 +440,7 @@ impl SpanLink {
     }
 
     /// Add an attribute
+    #[must_use]
     pub fn with_attribute(
         mut self,
         key: impl Into<String>,
@@ -480,6 +515,7 @@ impl Span {
     }
 
     /// Create a child span
+    #[must_use]
     pub fn child(&self, name: impl Into<String>) -> Self {
         let mut child = Span::new(name, self.trace_id);
         child.parent_span_id = Some(self.span_id);
@@ -488,12 +524,14 @@ impl Span {
     }
 
     /// Set the span kind
+    #[must_use]
     pub fn with_kind(mut self, kind: SpanKind) -> Self {
         self.kind = kind;
         self
     }
 
     /// Set the parent span
+    #[must_use]
     pub fn with_parent(mut self, parent_span_id: SpanId) -> Self {
         self.parent_span_id = Some(parent_span_id);
         self
@@ -549,16 +587,19 @@ impl Span {
     }
 
     /// Check if the span has ended
+    #[must_use]
     pub fn is_ended(&self) -> bool {
         self.end_time.is_some()
     }
 
     /// Get the duration of the span
+    #[must_use]
     pub fn duration(&self) -> Option<chrono::Duration> {
         self.end_time.map(|end| end - self.start_time)
     }
 
     /// Get duration in milliseconds
+    #[must_use]
     pub fn duration_ms(&self) -> Option<i64> {
         self.duration().map(|d| d.num_milliseconds())
     }
@@ -590,36 +631,42 @@ impl SpanBuilder {
     }
 
     /// Set the trace ID
+    #[must_use]
     pub fn trace_id(mut self, trace_id: TraceId) -> Self {
         self.trace_id = Some(trace_id);
         self
     }
 
     /// Set the parent span ID
+    #[must_use]
     pub fn parent(mut self, parent_span_id: SpanId) -> Self {
         self.parent_span_id = Some(parent_span_id);
         self
     }
 
     /// Set the span kind
+    #[must_use]
     pub fn kind(mut self, kind: SpanKind) -> Self {
         self.kind = kind;
         self
     }
 
     /// Add an attribute
+    #[must_use]
     pub fn attribute(mut self, key: impl Into<String>, value: impl Into<AttributeValue>) -> Self {
         self.attributes.insert(key.into(), value.into());
         self
     }
 
     /// Add a link
+    #[must_use]
     pub fn link(mut self, link: SpanLink) -> Self {
         self.links.push(link);
         self
     }
 
     /// Set sampling decision
+    #[must_use]
     pub fn sampled(mut self, sampled: bool) -> Self {
         self.is_sampled = sampled;
         self
@@ -654,7 +701,7 @@ mod tests {
 
     #[test]
     fn test_trace_id_hex() {
-        let id = TraceId::new(0x0123456789abcdef, 0xfedcba9876543210);
+        let id = TraceId::new(0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210);
         let hex = id.to_hex();
         assert_eq!(hex, "0123456789abcdeffedcba9876543210");
 
@@ -679,7 +726,7 @@ mod tests {
 
     #[test]
     fn test_span_id_hex() {
-        let id = SpanId::new(0x0123456789abcdef);
+        let id = SpanId::new(0x0123_4567_89ab_cdef);
         let hex = id.to_hex();
         assert_eq!(hex, "0123456789abcdef");
 

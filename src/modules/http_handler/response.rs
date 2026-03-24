@@ -70,7 +70,9 @@ impl Response {
     /// Get a header value.
     #[must_use]
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.get(&name.to_lowercase()).map(|s| s.as_str())
+        self.headers
+            .get(&name.to_lowercase())
+            .map(std::string::String::as_str)
     }
 
     /// Get all headers.
@@ -121,7 +123,6 @@ impl Response {
         // Status line
         let version_str = match self.version {
             Version::HTTP_10 => "HTTP/1.0",
-            Version::HTTP_11 => "HTTP/1.1",
             Version::HTTP_2 => "HTTP/2.0",
             _ => "HTTP/1.1",
         };
@@ -137,7 +138,7 @@ impl Response {
 
         // Headers
         for (name, value) in &self.headers {
-            buf.extend_from_slice(format!("{}: {}\r\n", name, value).as_bytes());
+            buf.extend_from_slice(format!("{name}: {value}\r\n").as_bytes());
         }
 
         // Content-Length if not set and we have a body
@@ -157,6 +158,10 @@ impl Response {
     }
 
     /// Parse a response from bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data is not a valid HTTP response.
     pub fn parse(data: &[u8]) -> HttpResult<(Self, usize)> {
         let mut headers = [httparse::EMPTY_HEADER; 100];
         let mut resp = httparse::Response::new(&mut headers);
@@ -168,7 +173,6 @@ impl Response {
 
                 let version = match resp.version {
                     Some(0) => Version::HTTP_10,
-                    Some(1) => Version::HTTP_11,
                     _ => Version::HTTP_11,
                 };
 
@@ -228,18 +232,21 @@ impl ResponseBuilder {
     }
 
     /// Set the status code.
+    #[must_use]
     pub fn status(mut self, status: StatusCode) -> Self {
         self.status = status;
         self
     }
 
     /// Set the HTTP version.
+    #[must_use]
     pub fn version(mut self, version: Version) -> Self {
         self.version = version;
         self
     }
 
     /// Add a header.
+    #[must_use]
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers
             .insert(name.into().to_lowercase(), value.into());
@@ -247,17 +254,20 @@ impl ResponseBuilder {
     }
 
     /// Set the Content-Type header.
+    #[must_use]
     pub fn content_type(self, content_type: impl Into<String>) -> Self {
         self.header("content-type", content_type)
     }
 
     /// Set the response body.
+    #[must_use]
     pub fn body(mut self, body: impl Into<Bytes>) -> Self {
         self.body = body.into();
         self
     }
 
     /// Set a text body with Content-Type: text/plain.
+    #[must_use]
     pub fn text(self, text: impl Into<String>) -> Self {
         let text = text.into();
         self.content_type("text/plain; charset=utf-8")
@@ -265,6 +275,7 @@ impl ResponseBuilder {
     }
 
     /// Set a JSON body with Content-Type: application/json.
+    #[must_use]
     pub fn json(self, json: impl Into<String>) -> Self {
         let json = json.into();
         self.content_type("application/json")
@@ -272,6 +283,7 @@ impl ResponseBuilder {
     }
 
     /// Set an HTML body with Content-Type: text/html.
+    #[must_use]
     pub fn html(self, html: impl Into<String>) -> Self {
         let html = html.into();
         self.content_type("text/html; charset=utf-8")

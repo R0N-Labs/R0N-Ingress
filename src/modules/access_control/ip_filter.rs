@@ -71,18 +71,19 @@ impl BloomGuard {
         false
     }
 
-    #[inline(always)]
+    #[inline]
     fn combine(prefix_len: u8, network: u32) -> u64 {
-        (prefix_len as u64) << 32 | network as u64
+        (u64::from(prefix_len)) << 32 | u64::from(network)
     }
 
     /// FNV-1a inspired hash with seed mixing.
-    #[inline(always)]
+    #[inline]
+    #[allow(clippy::cast_possible_truncation)]
     fn hash(key: u64, seed: u32) -> usize {
         let mut h = 0x517c_c1b7_2722_0a95_u64;
         h ^= key;
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
-        h ^= seed as u64;
+        h ^= u64::from(seed);
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
         h as usize
     }
@@ -93,7 +94,7 @@ impl std::fmt::Debug for BloomGuard {
         f.debug_struct("BloomGuard")
             .field("num_bits", &self.num_bits)
             .field("active_prefixes", &self.active_prefixes)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -172,7 +173,7 @@ impl CidrTrie {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /// Compute mask for a given prefix length.  `/0` → `0`, `/32` → `0xFFFF_FFFF`.
-#[inline(always)]
+#[inline]
 const fn prefix_mask(prefix_len: u8) -> u32 {
     if prefix_len == 0 {
         0
@@ -199,7 +200,7 @@ pub struct IpFilter {
     /// Bloom filter for fast-path rejection.
     bloom: BloomGuard,
 
-    /// Cache of ip_u32 → action (no String allocation).
+    /// Cache of `ip_u32` → action (no String allocation).
     cache: Arc<RwLock<HashMap<u32, RuleAction>>>,
 
     /// Maximum cache size.
@@ -211,6 +212,10 @@ pub struct IpFilter {
 
 impl IpFilter {
     /// Create a new IP filter from configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any IP address or CIDR in the configuration is invalid.
     pub fn new(config: IpFilterConfig) -> AccessControlResult<Self> {
         let total_cidrs: usize = config.rules.iter().map(|r| r.addresses.len()).sum();
         let mut trie = CidrTrie::new();
@@ -282,7 +287,7 @@ impl IpFilter {
                             "octet too long in '{ip}'"
                         )));
                     }
-                    octet = octet * 10 + (b - b'0') as u32;
+                    octet = octet * 10 + u32::from(b - b'0');
                     if octet > 255 {
                         return Err(AccessControlError::InvalidIpAddress(format!(
                             "octet > 255 in '{ip}'"
@@ -323,6 +328,14 @@ impl IpFilter {
     }
 
     /// Check if an IP address matches this filter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the IP address string is invalid.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal cache lock is poisoned.
     #[inline]
     pub fn check(&self, ip: &str) -> AccessControlResult<RuleAction> {
         // Parse first — enables u32 cache key (no String allocation)
@@ -337,13 +350,13 @@ impl IpFilter {
         }
 
         // Bloom filter: fast reject IPs that cannot match any rule
-        let action = if !self.bloom.might_match(ip_u32) {
-            self.config.default_action
-        } else {
+        let action = if self.bloom.might_match(ip_u32) {
             // Trie lookup: O(32) deterministic, priority-aware
             self.trie
                 .lookup(ip_u32)
                 .unwrap_or(self.config.default_action)
+        } else {
+            self.config.default_action
         };
 
         // Populate cache (u32 key — zero heap allocation)
@@ -358,12 +371,20 @@ impl IpFilter {
     }
 
     /// Check if an IP is allowed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the IP address string is invalid.
     pub fn is_allowed(&self, ip: &str) -> AccessControlResult<bool> {
         let action = self.check(ip)?;
         Ok(action.is_allow())
     }
 
     /// Get the client IP from headers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the IP address string is invalid.
     pub fn get_client_ip(
         &self,
         direct_ip: &str,
@@ -416,11 +437,19 @@ impl IpFilter {
     }
 
     /// Clear the cache.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal cache lock is poisoned.
     pub fn clear_cache(&self) {
         self.cache.write().unwrap().clear();
     }
 
     /// Get cache size.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the cache lock is poisoned.
     #[must_use]
     pub fn cache_size(&self) -> usize {
         self.cache.read().unwrap().len()
@@ -441,6 +470,10 @@ pub struct AllowList {
 
 impl AllowList {
     /// Create a new allow list from IP addresses/CIDRs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any address or CIDR is invalid.
     pub fn new(addresses: Vec<String>) -> AccessControlResult<Self> {
         let config = IpFilterConfig {
             enabled: true,
@@ -456,6 +489,10 @@ impl AllowList {
     }
 
     /// Check if an IP is allowed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the IP address string is invalid.
     pub fn is_allowed(&self, ip: &str) -> AccessControlResult<bool> {
         self.filter.is_allowed(ip)
     }
@@ -469,6 +506,10 @@ pub struct DenyList {
 
 impl DenyList {
     /// Create a new deny list from IP addresses/CIDRs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any address or CIDR is invalid.
     pub fn new(addresses: Vec<String>) -> AccessControlResult<Self> {
         let config = IpFilterConfig {
             enabled: true,
@@ -484,12 +525,20 @@ impl DenyList {
     }
 
     /// Check if an IP is blocked.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the IP address string is invalid.
     pub fn is_blocked(&self, ip: &str) -> AccessControlResult<bool> {
         let allowed = self.filter.is_allowed(ip)?;
         Ok(!allowed)
     }
 
     /// Check if an IP is allowed (not blocked).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the IP address string is invalid.
     pub fn is_allowed(&self, ip: &str) -> AccessControlResult<bool> {
         self.filter.is_allowed(ip)
     }
@@ -501,9 +550,9 @@ mod tests {
 
     #[test]
     fn test_parse_ip() {
-        assert_eq!(IpFilter::parse_ip("192.168.1.1").unwrap(), 0xC0A80101);
-        assert_eq!(IpFilter::parse_ip("10.0.0.1").unwrap(), 0x0A000001);
-        assert_eq!(IpFilter::parse_ip("255.255.255.255").unwrap(), 0xFFFFFFFF);
+        assert_eq!(IpFilter::parse_ip("192.168.1.1").unwrap(), 0xC0A8_0101);
+        assert_eq!(IpFilter::parse_ip("10.0.0.1").unwrap(), 0x0A00_0001);
+        assert_eq!(IpFilter::parse_ip("255.255.255.255").unwrap(), 0xFFFF_FFFF);
         assert_eq!(IpFilter::parse_ip("0.0.0.0").unwrap(), 0);
     }
 
@@ -518,16 +567,16 @@ mod tests {
     #[test]
     fn test_parse_cidr() {
         let (net, plen) = IpFilter::parse_cidr_pair("192.168.0.0/16").unwrap();
-        assert_eq!(net & prefix_mask(plen), 0xC0A80000);
-        assert_eq!(prefix_mask(plen), 0xFFFF0000);
+        assert_eq!(net & prefix_mask(plen), 0xC0A8_0000);
+        assert_eq!(prefix_mask(plen), 0xFFFF_0000);
 
         let (net, plen) = IpFilter::parse_cidr_pair("10.0.0.0/8").unwrap();
-        assert_eq!(net & prefix_mask(plen), 0x0A000000);
-        assert_eq!(prefix_mask(plen), 0xFF000000);
+        assert_eq!(net & prefix_mask(plen), 0x0A00_0000);
+        assert_eq!(prefix_mask(plen), 0xFF00_0000);
 
         let (net, plen) = IpFilter::parse_cidr_pair("192.168.1.1").unwrap();
-        assert_eq!(net & prefix_mask(plen), 0xC0A80101);
-        assert_eq!(prefix_mask(plen), 0xFFFFFFFF);
+        assert_eq!(net & prefix_mask(plen), 0xC0A8_0101);
+        assert_eq!(prefix_mask(plen), 0xFFFF_FFFF);
     }
 
     #[test]

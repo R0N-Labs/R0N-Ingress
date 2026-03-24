@@ -52,65 +52,76 @@ pub struct ScanContext {
 
 impl ScanContext {
     /// Create new scan context
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Builder: set source IP
+    #[must_use]
     pub fn with_source_ip(mut self, ip: IpAddr) -> Self {
         self.source_ip = Some(ip);
         self
     }
 
     /// Builder: set method
+    #[must_use]
     pub fn with_method(mut self, method: impl Into<String>) -> Self {
         self.method = method.into();
         self
     }
 
     /// Builder: set URI
+    #[must_use]
     pub fn with_uri(mut self, uri: impl Into<String>) -> Self {
         self.uri = uri.into();
         self
     }
 
     /// Builder: set query string
+    #[must_use]
     pub fn with_query_string(mut self, qs: impl Into<String>) -> Self {
         self.query_string = Some(qs.into());
         self
     }
 
     /// Builder: add query parameter
+    #[must_use]
     pub fn with_query_param(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.query_params.insert(key.into(), value.into());
         self
     }
 
     /// Builder: add header
+    #[must_use]
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(key.into().to_lowercase(), value.into());
         self
     }
 
     /// Builder: add cookie
+    #[must_use]
     pub fn with_cookie(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.cookies.insert(name.into(), value.into());
         self
     }
 
     /// Builder: set body
+    #[must_use]
     pub fn with_body(mut self, body: impl Into<String>) -> Self {
         self.body = Some(body.into());
         self
     }
 
     /// Builder: set content type
+    #[must_use]
     pub fn with_content_type(mut self, ct: impl Into<String>) -> Self {
         self.content_type = Some(ct.into());
         self
     }
 
     /// Builder: add form field
+    #[must_use]
     pub fn with_form_field(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.form_fields.insert(name.into(), value.into());
         self
@@ -294,6 +305,7 @@ pub struct ScanResult {
 
 impl ScanResult {
     /// Create an allowed result
+    #[must_use]
     pub fn allowed() -> Self {
         Self {
             blocked: false,
@@ -307,6 +319,7 @@ impl ScanResult {
     }
 
     /// Create a blocked result
+    #[must_use]
     pub fn blocked(reason: &str) -> Self {
         Self {
             blocked: true,
@@ -320,11 +333,13 @@ impl ScanResult {
     }
 
     /// Check if any threats were detected
+    #[must_use]
     pub fn has_threats(&self) -> bool {
         !self.matches.is_empty() || self.detector_results.iter().any(|r| r.detected)
     }
 
     /// Get highest severity match
+    #[must_use]
     pub fn highest_severity(&self) -> Option<&RuleMatch> {
         self.matches.iter().max_by_key(|m| m.score)
     }
@@ -350,15 +365,16 @@ pub struct RuleEngine {
     /// Bypass rules
     bypass_rules: Vec<BypassRule>,
 
-    /// Pre-compiled bypass regexes (for BypassOperator::Matches)
+    /// Pre-compiled bypass regexes (for `BypassOperator::Matches`)
     bypass_regexes: HashMap<String, regex::Regex>,
 
-    /// Disabled rule IDs (per route) — HashSet for O(1) lookup
+    /// Disabled rule IDs (per route) — `HashSet` for O(1) lookup
     disabled_rules: HashMap<String, HashSet<String>>,
 }
 
 impl RuleEngine {
     /// Create new rule engine with config
+    #[must_use]
     pub fn new(config: WafConfig) -> Self {
         let detector_config = &config.detectors;
 
@@ -389,11 +405,13 @@ impl RuleEngine {
     }
 
     /// Create with default config
+    #[must_use]
     pub fn default_config() -> Self {
         Self::new(WafConfig::default())
     }
 
     /// Create with custom detector config
+    #[must_use]
     pub fn with_detectors(detector_config: DetectorConfig) -> Self {
         let config = WafConfig {
             detectors: detector_config,
@@ -403,6 +421,7 @@ impl RuleEngine {
     }
 
     /// Add custom rules
+    #[allow(clippy::needless_pass_by_value)]
     pub fn add_rules(&mut self, rules: RuleSet) {
         for rule in rules.all_rules() {
             self.rules.add_rule(rule.clone());
@@ -425,7 +444,7 @@ impl RuleEngine {
             .insert(rule_id.to_string());
     }
 
-    /// Check if a rule is disabled for a route (O(1) HashSet lookup)
+    /// Check if a rule is disabled for a route (O(1) `HashSet` lookup)
     fn is_rule_disabled(&self, rule_id: &str, route: Option<&str>) -> bool {
         // Check global disables
         if let Some(disabled) = self.disabled_rules.get("*") {
@@ -499,7 +518,7 @@ impl RuleEngine {
             BypassOperator::InCidr => {
                 // Parse IP and check CIDR
                 if let Some(ip) = context.source_ip {
-                    self.ip_in_cidr(ip, &condition.value)
+                    Self::ip_in_cidr(ip, &condition.value)
                 } else {
                     false
                 }
@@ -507,7 +526,7 @@ impl RuleEngine {
         }
     }
 
-    fn ip_in_cidr(&self, ip: IpAddr, cidr: &str) -> bool {
+    fn ip_in_cidr(ip: IpAddr, cidr: &str) -> bool {
         let parts: Vec<&str> = cidr.split('/').collect();
         if parts.len() != 2 {
             return false;
@@ -547,6 +566,11 @@ impl RuleEngine {
     }
 
     /// Scan a request
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rule matching or detection fails.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn scan(&self, context: &ScanContext) -> WafResult<ScanResult> {
         let start = std::time::Instant::now();
 
@@ -569,7 +593,7 @@ impl RuleEngine {
         self.run_detectors(context, &mut result)?;
 
         // Run custom rules
-        self.run_rules(context, &mut result)?;
+        self.run_rules(context, &mut result);
 
         // Calculate final score and blocking decision
         result.anomaly_score = result.matches.iter().map(|m| m.score).sum::<u32>()
@@ -654,7 +678,7 @@ impl RuleEngine {
         Ok(())
     }
 
-    fn run_rules(&self, context: &ScanContext, result: &mut ScanResult) -> WafResult<()> {
+    fn run_rules(&self, context: &ScanContext, result: &mut ScanResult) {
         for rule in self.rules.enabled_rules() {
             // Check if rule is disabled (O(1) HashSet lookup)
             if self.is_rule_disabled(&rule.definition.id, context.route.as_deref()) {
@@ -671,7 +695,7 @@ impl RuleEngine {
                             category: rule.definition.category,
                             score: rule.definition.score,
                             action: rule.definition.action,
-                            target: format!("{:?}", target),
+                            target: format!("{target:?}"),
                             matched_value: truncate_value(&value, 100),
                         });
 
@@ -683,16 +707,16 @@ impl RuleEngine {
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Get the current configuration
+    #[must_use]
     pub fn config(&self) -> &WafConfig {
         &self.config
     }
 
     /// Get rule count
+    #[must_use]
     pub fn rule_count(&self) -> usize {
         self.rules.len()
     }
@@ -883,10 +907,19 @@ mod tests {
 
     #[test]
     fn test_ip_in_cidr() {
-        let engine = RuleEngine::default_config();
+        let _engine = RuleEngine::default_config();
 
-        assert!(engine.ip_in_cidr("10.0.0.1".parse().unwrap(), "10.0.0.0/8"));
-        assert!(engine.ip_in_cidr("192.168.1.1".parse().unwrap(), "192.168.0.0/16"));
-        assert!(!engine.ip_in_cidr("192.168.1.1".parse().unwrap(), "10.0.0.0/8"));
+        assert!(RuleEngine::ip_in_cidr(
+            "10.0.0.1".parse().unwrap(),
+            "10.0.0.0/8"
+        ));
+        assert!(RuleEngine::ip_in_cidr(
+            "192.168.1.1".parse().unwrap(),
+            "192.168.0.0/16"
+        ));
+        assert!(!RuleEngine::ip_in_cidr(
+            "192.168.1.1".parse().unwrap(),
+            "10.0.0.0/8"
+        ));
     }
 }

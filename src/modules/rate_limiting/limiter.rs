@@ -164,7 +164,7 @@ impl std::fmt::Debug for RateLimiter {
             .field("total_checks", &self.total_checks)
             .field("total_allowed", &self.total_allowed)
             .field("total_denied", &self.total_denied)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -268,6 +268,7 @@ impl RateLimiter {
     }
 
     /// Check a specific rate limit rule.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn check_rule(
         &self,
         ctx: &RateLimitContext,
@@ -283,7 +284,7 @@ impl RateLimiter {
         let scope_str = rule.scope_string();
         let mut bucket_key =
             String::with_capacity(rule_name.len() + scope_str.len() + scope_key.len() + 2);
-        let _ = write!(bucket_key, "{}:{}:{}", rule_name, scope_str, scope_key);
+        let _ = write!(bucket_key, "{rule_name}:{scope_str}:{scope_key}");
         let bucket = self.get_or_create_bucket(&bucket_key, rule);
 
         if bucket.try_consume(rule.tokens_per_request) {
@@ -302,6 +303,7 @@ impl RateLimiter {
     }
 
     /// Check per-IP rate limit.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn check_ip_limit(&self, ip: &str, config: &PerIpConfig) -> RateLimitDecision {
         let mut bucket_key = String::with_capacity(7 + ip.len());
         let _ = write!(bucket_key, "per-ip:{ip}");
@@ -368,6 +370,10 @@ impl RateLimiter {
     }
 
     /// Clean up expired buckets.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn cleanup(&self, max_idle: Duration) {
         let now = Instant::now();
         let mut buckets = self.buckets.write().unwrap();
@@ -376,6 +382,10 @@ impl RateLimiter {
     }
 
     /// Get the number of active buckets.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn active_bucket_count(&self) -> usize {
         self.buckets.read().unwrap().len()

@@ -1,6 +1,6 @@
-//! Kubernetes Secrets and ConfigMaps management.
+//! Kubernetes Secrets and `ConfigMaps` management.
 //!
-//! Provides integration with Kubernetes Secrets and ConfigMaps for
+//! Provides integration with Kubernetes Secrets and `ConfigMaps` for
 //! TLS certificates, configuration data, and sensitive credentials.
 
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use super::discovery::WatchEvent;
 use super::error::{K8sError, K8sResult};
 
-/// Secret manager for Kubernetes Secrets and ConfigMaps.
+/// Secret manager for Kubernetes Secrets and `ConfigMaps`.
 #[derive(Debug)]
 pub struct SecretManager {
     /// Cached secrets by namespace/name.
@@ -34,6 +34,7 @@ impl Default for SecretManager {
 
 impl SecretManager {
     /// Create a new secret manager.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             secrets: HashMap::new(),
@@ -54,48 +55,59 @@ impl SecretManager {
     }
 
     /// Set a type filter for secrets.
+    #[must_use]
     pub fn with_type_filter(mut self, secret_type: SecretType) -> Self {
         self.type_filter = Some(secret_type);
         self
     }
 
     /// Set the cache TTL.
+    #[must_use]
     pub fn with_cache_ttl(mut self, ttl: Duration) -> Self {
         self.cache_ttl = ttl;
         self
     }
 
     /// Get a secret by namespace and name.
+    #[must_use]
     pub fn get_secret(&self, namespace: &str, name: &str) -> Option<&Secret> {
         let key = SecretKey::new(namespace, name);
         self.secrets.get(&key)
     }
 
     /// Get a config map by namespace and name.
+    #[must_use]
     pub fn get_config_map(&self, namespace: &str, name: &str) -> Option<&ConfigMap> {
         let key = SecretKey::new(namespace, name);
         self.config_maps.get(&key)
     }
 
     /// Get a secret value by key.
+    #[must_use]
     pub fn get_secret_value(&self, namespace: &str, name: &str, key: &str) -> Option<Vec<u8>> {
         self.get_secret(namespace, name)
             .and_then(|s| s.data.get(key).cloned())
     }
 
     /// Get a secret value as string.
+    #[must_use]
     pub fn get_secret_string(&self, namespace: &str, name: &str, key: &str) -> Option<String> {
         self.get_secret_value(namespace, name, key)
             .and_then(|v| String::from_utf8(v).ok())
     }
 
     /// Get a config map value.
+    #[must_use]
     pub fn get_config_value(&self, namespace: &str, name: &str, key: &str) -> Option<&str> {
         self.get_config_map(namespace, name)
-            .and_then(|cm| cm.data.get(key).map(|s| s.as_str()))
+            .and_then(|cm| cm.data.get(key).map(std::string::String::as_str))
     }
 
     /// Get TLS certificate and key from a secret.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the secret is not found, is not a TLS type, or is missing required keys.
     pub fn get_tls_certificate(&self, namespace: &str, name: &str) -> K8sResult<TlsCertificate> {
         let secret = self
             .get_secret(namespace, name)
@@ -130,6 +142,10 @@ impl SecretManager {
     }
 
     /// Get Docker registry credentials from a secret.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the secret is not found or is not a docker config type.
     pub fn get_docker_credentials(&self, namespace: &str, name: &str) -> K8sResult<DockerConfig> {
         let secret = self
             .get_secret(namespace, name)
@@ -152,11 +168,11 @@ impl SecretManager {
         let data = secret
             .data
             .get(config_key)
-            .ok_or_else(|| K8sError::SecretDecodeError(format!("Missing {}", config_key)))?;
+            .ok_or_else(|| K8sError::SecretDecodeError(format!("Missing {config_key}")))?;
 
         // Parse docker config JSON
         let config_str = String::from_utf8(data.clone())
-            .map_err(|e| K8sError::SecretDecodeError(format!("Invalid UTF-8: {}", e)))?;
+            .map_err(|e| K8sError::SecretDecodeError(format!("Invalid UTF-8: {e}")))?;
 
         // Simple parsing - in production use serde_json
         Ok(DockerConfig {
@@ -166,6 +182,10 @@ impl SecretManager {
     }
 
     /// Get basic auth credentials from a secret.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the secret is not found.
     pub fn get_basic_auth(&self, namespace: &str, name: &str) -> K8sResult<BasicAuth> {
         let secret = self
             .get_secret(namespace, name)
@@ -201,16 +221,19 @@ impl SecretManager {
     }
 
     /// Get the number of cached secrets.
+    #[must_use]
     pub fn secret_count(&self) -> usize {
         self.secrets.len()
     }
 
     /// Get the number of cached config maps.
+    #[must_use]
     pub fn config_map_count(&self) -> usize {
         self.config_maps.len()
     }
 
     /// Check if cache needs refresh.
+    #[must_use]
     pub fn needs_refresh(&self) -> bool {
         match self.last_sync {
             Some(last) => last.elapsed() > self.cache_ttl,
@@ -219,6 +242,10 @@ impl SecretManager {
     }
 
     /// Handle a secret watch event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watch event contains an error status.
     pub fn handle_secret_event(&mut self, event: WatchEvent<Secret>) -> K8sResult<()> {
         match event {
             WatchEvent::Added(secret) | WatchEvent::Modified(secret) => {
@@ -255,6 +282,10 @@ impl SecretManager {
     }
 
     /// Handle a config map watch event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watch event contains an error status.
     pub fn handle_config_map_event(&mut self, event: WatchEvent<ConfigMap>) -> K8sResult<()> {
         match event {
             WatchEvent::Added(cm) | WatchEvent::Modified(cm) => {
@@ -284,6 +315,10 @@ impl SecretManager {
     }
 
     /// Resolve a secret reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the referenced secret or key is not found.
     pub fn resolve_ref(&self, secret_ref: &SecretRef) -> K8sResult<Vec<u8>> {
         self.get_secret_value(&secret_ref.namespace, &secret_ref.name, &secret_ref.key)
             .ok_or_else(|| K8sError::NotFound {
@@ -382,30 +417,35 @@ impl Secret {
     }
 
     /// Set the secret type.
+    #[must_use]
     pub fn with_type(mut self, secret_type: SecretType) -> Self {
         self.secret_type = secret_type;
         self
     }
 
     /// Add data entry.
+    #[must_use]
     pub fn with_data(mut self, key: impl Into<String>, value: Vec<u8>) -> Self {
         self.data.insert(key.into(), value);
         self
     }
 
     /// Add string data entry.
+    #[must_use]
     pub fn with_string_data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.string_data.insert(key.into(), value.into());
         self
     }
 
     /// Mark as immutable.
+    #[must_use]
     pub fn immutable(mut self) -> Self {
         self.immutable = true;
         self
     }
 
     /// Check if this is a TLS secret.
+    #[must_use]
     pub fn is_tls(&self) -> bool {
         self.secret_type == SecretType::Tls
     }
@@ -442,6 +482,7 @@ pub enum SecretType {
 
 impl SecretType {
     /// Parse from Kubernetes type string.
+    #[must_use]
     pub fn from_k8s_type(s: &str) -> Self {
         match s {
             "Opaque" => Self::Opaque,
@@ -457,6 +498,7 @@ impl SecretType {
     }
 
     /// Convert to Kubernetes type string.
+    #[must_use]
     pub fn to_k8s_type(&self) -> &str {
         match self {
             Self::Opaque => "Opaque",
@@ -472,10 +514,10 @@ impl SecretType {
     }
 }
 
-/// Kubernetes ConfigMap representation.
+/// Kubernetes `ConfigMap` representation.
 #[derive(Debug, Clone)]
 pub struct ConfigMap {
-    /// ConfigMap name.
+    /// `ConfigMap` name.
     pub name: String,
     /// Namespace.
     pub namespace: String,
@@ -512,26 +554,30 @@ impl ConfigMap {
     }
 
     /// Add a data entry.
+    #[must_use]
     pub fn with_data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.data.insert(key.into(), value.into());
         self
     }
 
     /// Add a binary data entry.
+    #[must_use]
     pub fn with_binary_data(mut self, key: impl Into<String>, value: Vec<u8>) -> Self {
         self.binary_data.insert(key.into(), value);
         self
     }
 
     /// Mark as immutable.
+    #[must_use]
     pub fn immutable(mut self) -> Self {
         self.immutable = true;
         self
     }
 
     /// Get a value.
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.data.get(key).map(|s| s.as_str())
+        self.data.get(key).map(std::string::String::as_str)
     }
 
     /// Get all keys.
@@ -553,16 +599,19 @@ pub struct TlsCertificate {
 
 impl TlsCertificate {
     /// Get certificate as string.
+    #[must_use]
     pub fn cert_pem(&self) -> Option<String> {
         String::from_utf8(self.cert.clone()).ok()
     }
 
     /// Get key as string.
+    #[must_use]
     pub fn key_pem(&self) -> Option<String> {
         String::from_utf8(self.key.clone()).ok()
     }
 
     /// Get CA as string.
+    #[must_use]
     pub fn ca_pem(&self) -> Option<String> {
         self.ca
             .as_ref()
@@ -603,6 +652,7 @@ pub struct BasicAuth {
 
 impl BasicAuth {
     /// Encode as base64 for Authorization header.
+    #[must_use]
     pub fn encode(&self) -> String {
         use std::io::Write;
         let mut buf = Vec::new();

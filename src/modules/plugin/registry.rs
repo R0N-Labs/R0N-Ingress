@@ -30,6 +30,7 @@ impl Default for PluginRegistry {
 
 impl PluginRegistry {
     /// Create a new plugin registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             plugins: HashMap::new(),
@@ -40,6 +41,7 @@ impl PluginRegistry {
     }
 
     /// Create with configuration.
+    #[must_use]
     pub fn with_config(config: RegistryConfig) -> Self {
         Self {
             config,
@@ -53,22 +55,25 @@ impl PluginRegistry {
     /// Returns an error if the path does not exist or cannot be resolved.
     pub fn add_search_path(&mut self, path: impl AsRef<Path>) {
         // Canonicalize to prevent directory traversal
-        match path.as_ref().canonicalize() {
-            Ok(canonical) => self.search_paths.push(canonical),
-            Err(_) => {
-                // If path doesn't exist yet, store as-is but normalize
-                // by stripping any .. components
-                let cleaned: PathBuf = path
-                    .as_ref()
-                    .components()
-                    .filter(|c| !matches!(c, std::path::Component::ParentDir))
-                    .collect();
-                self.search_paths.push(cleaned);
-            },
+        if let Ok(canonical) = path.as_ref().canonicalize() {
+            self.search_paths.push(canonical);
+        } else {
+            // If path doesn't exist yet, store as-is but normalize
+            // by stripping any .. components
+            let cleaned: PathBuf = path
+                .as_ref()
+                .components()
+                .filter(|c| !matches!(c, std::path::Component::ParentDir))
+                .collect();
+            self.search_paths.push(cleaned);
         }
     }
 
     /// Register a plugin.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin already exists or has an invalid version.
     pub fn register(&mut self, info: PluginInfo, sandbox: SandboxConfig) -> PluginResult<()> {
         if self.plugins.contains_key(&info.name) {
             return Err(PluginError::AlreadyExists {
@@ -100,6 +105,10 @@ impl PluginRegistry {
     }
 
     /// Unregister a plugin.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin is not found.
     pub fn unregister(&mut self, name: &str) -> PluginResult<PluginInfo> {
         let entry = self
             .plugins
@@ -113,6 +122,7 @@ impl PluginRegistry {
     }
 
     /// Get a plugin entry.
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&PluginEntry> {
         self.plugins.get(name)
     }
@@ -133,6 +143,10 @@ impl PluginRegistry {
     }
 
     /// Update plugin state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin is not found.
     pub fn update_state(&mut self, name: &str, state: PluginState) -> PluginResult<()> {
         let entry = self
             .plugins
@@ -149,6 +163,10 @@ impl PluginRegistry {
     }
 
     /// Set plugin error state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin is not found.
     pub fn set_error(&mut self, name: &str, error: String) -> PluginResult<()> {
         let entry = self
             .plugins
@@ -166,6 +184,7 @@ impl PluginRegistry {
     }
 
     /// Find plugin by name pattern.
+    #[must_use]
     pub fn find(&self, pattern: &str) -> Vec<&PluginEntry> {
         self.plugins
             .values()
@@ -174,6 +193,7 @@ impl PluginRegistry {
     }
 
     /// Find plugins by author.
+    #[must_use]
     pub fn find_by_author(&self, author: &str) -> Vec<&PluginEntry> {
         self.plugins
             .values()
@@ -182,6 +202,7 @@ impl PluginRegistry {
     }
 
     /// Find plugins by tag.
+    #[must_use]
     pub fn find_by_tag(&self, tag: &str) -> Vec<&PluginEntry> {
         self.plugins
             .values()
@@ -190,6 +211,10 @@ impl PluginRegistry {
     }
 
     /// Discover plugins from search paths.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a search path cannot be read.
     pub fn discover(&mut self) -> PluginResult<Vec<PluginInfo>> {
         let mut discovered = Vec::new();
 
@@ -201,9 +226,8 @@ impl PluginRegistry {
             if path.is_dir() {
                 discovered.extend(self.discover_dir(path)?);
             } else if path.extension().is_some_and(|e| e == "wasm") {
-                if let Ok(info) = self.load_plugin_info(path) {
-                    discovered.push(info);
-                }
+                let info = Self::load_plugin_info(path);
+                discovered.push(info);
             }
         }
 
@@ -220,9 +244,8 @@ impl PluginRegistry {
             let path = entry.path();
 
             if path.extension().is_some_and(|e| e == "wasm") {
-                if let Ok(info) = self.load_plugin_info(&path) {
-                    plugins.push(info);
-                }
+                let info = Self::load_plugin_info(&path);
+                plugins.push(info);
             } else if path.is_dir() && self.config.recursive_discovery {
                 plugins.extend(self.discover_dir(&path)?);
             }
@@ -232,26 +255,25 @@ impl PluginRegistry {
     }
 
     /// Load plugin info from a WASM file.
-    fn load_plugin_info(&self, path: &Path) -> PluginResult<PluginInfo> {
+    fn load_plugin_info(path: &Path) -> PluginInfo {
         // In a real implementation, this would:
         // 1. Load the WASM file
         // 2. Parse custom sections for metadata
         // 3. Call plugin_info export if available
 
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| {
+        let name = path.file_stem().and_then(|s| s.to_str()).map_or_else(
+            || {
                 // Generate a unique fallback name to avoid collisions
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
                 path.hash(&mut hasher);
                 format!("plugin-{:x}", hasher.finish())
-            });
+            },
+            std::string::ToString::to_string,
+        );
 
-        Ok(PluginInfo {
+        PluginInfo {
             name,
             version: "0.1.0".to_string(),
             api_version: 1,
@@ -265,26 +287,30 @@ impl PluginRegistry {
             dependencies: Vec::new(),
             capabilities: Vec::new(),
             path: Some(path.to_path_buf()),
-        })
+        }
     }
 
     /// Check for plugin updates.
+    #[must_use]
     pub fn check_updates(&self) -> Vec<PluginUpdate> {
         // In a real implementation, this would query a marketplace/registry
         Vec::new()
     }
 
     /// Get registry statistics.
+    #[must_use]
     pub fn stats(&self) -> &RegistryStats {
         &self.stats
     }
 
     /// Get number of registered plugins.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.plugins.len()
     }
 
     /// Check if registry is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.plugins.is_empty()
     }
@@ -336,21 +362,25 @@ pub struct PluginEntry {
 
 impl PluginEntry {
     /// Get time since registration.
+    #[must_use]
     pub fn registered_duration(&self) -> Duration {
         self.registered_at.elapsed()
     }
 
     /// Get time since last state change.
+    #[must_use]
     pub fn state_duration(&self) -> Duration {
         self.last_state_change.elapsed()
     }
 
     /// Check if plugin is available.
+    #[must_use]
     pub fn is_available(&self) -> bool {
         matches!(self.state, PluginState::Ready | PluginState::Running)
     }
 
     /// Check if plugin has failed.
+    #[must_use]
     pub fn has_failed(&self) -> bool {
         self.state == PluginState::Failed
     }
@@ -408,47 +438,55 @@ impl PluginInfo {
     }
 
     /// Builder: set description.
+    #[must_use]
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
     }
 
     /// Builder: set author.
+    #[must_use]
     pub fn with_author(mut self, author: impl Into<String>) -> Self {
         self.author = Some(author.into());
         self
     }
 
     /// Builder: set plugin type.
+    #[must_use]
     pub fn with_type(mut self, plugin_type: PluginType) -> Self {
         self.plugin_type = plugin_type;
         self
     }
 
     /// Builder: add tag.
+    #[must_use]
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tags.push(tag.into());
         self
     }
 
     /// Builder: add dependency.
+    #[must_use]
     pub fn with_dependency(mut self, dep: PluginDependency) -> Self {
         self.dependencies.push(dep);
         self
     }
 
     /// Builder: add capability.
+    #[must_use]
     pub fn with_capability(mut self, cap: impl Into<String>) -> Self {
         self.capabilities.push(cap.into());
         self
     }
 
     /// Parse version to components.
+    #[must_use]
     pub fn version_parts(&self) -> Option<(u32, u32, u32)> {
         parse_semver(&self.version)
     }
 
     /// Check if version satisfies requirement.
+    #[must_use]
     pub fn satisfies_version(&self, requirement: &str) -> bool {
         check_version_requirement(&self.version, requirement)
     }
@@ -473,6 +511,7 @@ pub enum PluginType {
 
 impl PluginType {
     /// Get type name.
+    #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
             Self::RequestHandler => "request_handler",
@@ -485,6 +524,7 @@ impl PluginType {
     }
 
     /// Parse from string.
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "request_handler" => Some(Self::RequestHandler),
@@ -521,16 +561,19 @@ pub enum PluginState {
 
 impl PluginState {
     /// Check if plugin can be started.
+    #[must_use]
     pub fn can_start(&self) -> bool {
         matches!(self, Self::Ready | Self::Stopped)
     }
 
     /// Check if plugin can be stopped.
+    #[must_use]
     pub fn can_stop(&self) -> bool {
         matches!(self, Self::Running)
     }
 
     /// Check if plugin is active.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Loading | Self::Ready | Self::Running)
     }
@@ -621,9 +664,8 @@ fn parse_semver(version: &str) -> Option<(u32, u32, u32)> {
 
 /// Check version requirement (simplified).
 fn check_version_requirement(version: &str, requirement: &str) -> bool {
-    let (v_major, v_minor, v_patch) = match parse_semver(version) {
-        Some(v) => v,
-        None => return false,
+    let Some((v_major, v_minor, v_patch)) = parse_semver(version) else {
+        return false;
     };
 
     // Handle exact version

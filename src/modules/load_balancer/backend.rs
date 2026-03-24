@@ -155,12 +155,20 @@ impl Backend {
     }
 
     /// Get the current state.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the state `RwLock` is poisoned.
     #[must_use]
     pub fn state(&self) -> BackendState {
         *self.state.read().expect("state lock poisoned")
     }
 
     /// Set the backend state.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the state `RwLock` is poisoned.
     pub fn set_state(&self, state: BackendState) {
         *self.state.write().expect("state lock poisoned") = state;
     }
@@ -190,6 +198,10 @@ impl Backend {
     }
 
     /// Record a health check result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the health check `RwLock` is poisoned.
     pub fn record_health_check(
         &self,
         success: bool,
@@ -266,6 +278,10 @@ impl BackendPool {
     }
 
     /// Add a backend to the pool.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backends `RwLock` is poisoned.
     pub fn add_backend(&self, backend: Backend) {
         let mut backends = self.backends.write().expect("backends lock poisoned");
         let mut address_map = self.address_map.write().expect("address_map lock poisoned");
@@ -277,6 +293,14 @@ impl BackendPool {
     }
 
     /// Remove a backend from the pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend address is not found in the pool.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backends `RwLock` is poisoned.
     pub fn remove_backend(&self, address: SocketAddr) -> LoadBalancerResult<()> {
         let mut backends = self.backends.write().expect("backends lock poisoned");
         let mut address_map = self.address_map.write().expect("address_map lock poisoned");
@@ -301,6 +325,10 @@ impl BackendPool {
     }
 
     /// Get a backend by address.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backends `RwLock` is poisoned.
     #[must_use]
     pub fn get_backend(&self, address: SocketAddr) -> Option<Arc<Backend>> {
         let backends = self.backends.read().expect("backends lock poisoned");
@@ -312,6 +340,10 @@ impl BackendPool {
     }
 
     /// Get all backends.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backends `RwLock` is poisoned.
     #[must_use]
     pub fn all_backends(&self) -> Vec<Arc<Backend>> {
         self.backends
@@ -321,6 +353,10 @@ impl BackendPool {
     }
 
     /// Get all healthy backends.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backends `RwLock` is poisoned.
     #[must_use]
     pub fn healthy_backends(&self) -> Vec<Arc<Backend>> {
         let backends = self.backends.read().expect("backends lock poisoned");
@@ -336,6 +372,10 @@ impl BackendPool {
     }
 
     /// Get backend count.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backends `RwLock` is poisoned.
     #[must_use]
     pub fn backend_count(&self) -> usize {
         self.backends.read().expect("backends lock poisoned").len()
@@ -348,6 +388,10 @@ impl BackendPool {
     }
 
     /// Check if pool is empty.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the backends `RwLock` is poisoned.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.backends

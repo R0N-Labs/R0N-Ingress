@@ -39,11 +39,19 @@ pub struct PooledConnection {
 
 impl PooledConnection {
     /// Get the underlying stream.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been taken.
     pub fn stream(&mut self) -> &mut TcpStream {
         self.stream.as_mut().expect("stream taken")
     }
 
     /// Take ownership of the stream (connection will not be returned to pool).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been taken.
     pub fn take(mut self) -> TcpStream {
         self.stream.take().expect("stream taken")
     }
@@ -309,7 +317,8 @@ impl ConnectionPool {
 
     /// Get pool statistics.
     #[inline]
-    pub async fn stats(&self) -> PoolStats {
+    #[must_use]
+    pub fn stats(&self) -> PoolStats {
         PoolStats {
             total_created: self.inner.stats.total_created.load(Ordering::Relaxed),
             total_reused: self.inner.stats.total_reused.load(Ordering::Relaxed),
@@ -323,7 +332,7 @@ impl ConnectionPool {
     /// Clear all pooled connections.
     pub async fn clear(&self) {
         let mut connections = self.inner.connections.lock().await;
-        let total: usize = connections.values().map(|v| v.len()).sum();
+        let total: usize = connections.values().map(std::vec::Vec::len).sum();
         connections.clear();
         self.inner.stats.pooled.store(0, Ordering::Relaxed);
 
@@ -394,7 +403,7 @@ mod tests {
         let conn = pool.get(backend).await.unwrap();
         assert!(conn.stream.is_some());
 
-        let stats = pool.stats().await;
+        let stats = pool.stats();
         assert_eq!(stats.total_created, 1);
         assert_eq!(stats.active_connections, 1);
     }
@@ -415,7 +424,7 @@ mod tests {
         // Get another connection - should reuse
         let _conn = pool.get(backend).await.unwrap();
 
-        let stats = pool.stats().await;
+        let stats = pool.stats();
         // May be 1 or 2 depending on timing
         assert!(stats.total_created >= 1);
     }
@@ -434,7 +443,7 @@ mod tests {
 
         pool.clear().await;
 
-        let stats = pool.stats().await;
+        let stats = pool.stats();
         assert_eq!(stats.pooled_connections, 0);
     }
 }

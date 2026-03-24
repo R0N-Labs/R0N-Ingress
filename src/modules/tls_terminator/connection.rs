@@ -110,7 +110,7 @@ impl std::fmt::Debug for TlsConnection {
             .field("peer", &self.peer_addr)
             .field("local", &self.local_addr)
             .field("sni", &self.sni_name)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

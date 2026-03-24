@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! End-to-End Proxy Benchmark
 //!
 //! Simulates a full ingress pipeline:

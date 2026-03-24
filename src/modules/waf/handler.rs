@@ -1,4 +1,4 @@
-//! WAF handler implementing ModuleContract
+//! WAF handler implementing `ModuleContract`
 
 use super::config::WafConfig;
 use super::engine::{RuleEngine, ScanContext, ScanResult};
@@ -40,6 +40,7 @@ pub struct WafStats {
 
 impl WafStats {
     /// Create new stats
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -96,6 +97,7 @@ impl WafStats {
     }
 
     /// Get block rate as percentage
+    #[allow(clippy::cast_precision_loss)]
     pub fn block_rate(&self) -> f64 {
         let scanned = self.requests_scanned.load(Ordering::Relaxed);
         if scanned == 0 {
@@ -125,6 +127,7 @@ pub struct ThreatInfo {
 
 impl ThreatInfo {
     /// Create info for an allowed request
+    #[must_use]
     pub fn allowed() -> Self {
         Self {
             blocked: false,
@@ -137,6 +140,7 @@ impl ThreatInfo {
     }
 
     /// Create info from scan result
+    #[must_use]
     pub fn from_result(result: &ScanResult) -> Self {
         let attack_types: Vec<String> = result
             .detector_results
@@ -285,7 +289,7 @@ impl WafRequest {
     }
 }
 
-/// WAF handler implementing ModuleContract
+/// WAF handler implementing `ModuleContract`
 pub struct WafHandler {
     /// Configuration
     config: WafConfig,
@@ -313,17 +317,19 @@ impl std::fmt::Debug for WafHandler {
             .field("engine", &self.engine.is_some())
             .field("status", &self.status)
             .field("stats", &self.stats)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
 impl WafHandler {
     /// Create a new WAF handler
+    #[must_use]
     pub fn new() -> Self {
         Self::with_config(WafConfig::default())
     }
 
     /// Create a WAF handler with custom configuration
+    #[must_use]
     pub fn with_config(config: WafConfig) -> Self {
         Self {
             config,
@@ -336,6 +342,10 @@ impl WafHandler {
     }
 
     /// Check a request through the WAF
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the scan engine fails.
     pub fn check_request(&self, request: &WafRequest) -> WafResult<ThreatInfo> {
         if !self.config.enabled {
             return Ok(ThreatInfo::allowed());
@@ -364,7 +374,10 @@ impl WafHandler {
                     &request.method,
                     &request.uri,
                     request.query_string.as_deref(),
-                    request.headers.get("user-agent").map(|s| s.as_str()),
+                    request
+                        .headers
+                        .get("user-agent")
+                        .map(std::string::String::as_str),
                     request.body.as_deref(),
                 );
 
@@ -384,6 +397,10 @@ impl WafHandler {
     }
 
     /// Scan raw input values (for simpler use cases)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the scan fails.
     pub fn scan_value(&self, value: &str) -> WafResult<ThreatInfo> {
         let request = WafRequest::new()
             .with_method("GET")
@@ -405,7 +422,9 @@ impl WafHandler {
 
     /// Get rule count
     pub fn rule_count(&self) -> usize {
-        self.engine.as_ref().map(|e| e.rule_count()).unwrap_or(0)
+        self.engine
+            .as_ref()
+            .map_or(0, super::engine::RuleEngine::rule_count)
     }
 }
 
@@ -426,7 +445,7 @@ fn generate_request_id() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("req-{:x}-{:04x}", timestamp, seq)
+    format!("req-{timestamp:x}-{seq:04x}")
 }
 
 impl ModuleContract for WafHandler {
@@ -464,7 +483,9 @@ impl ModuleContract for WafHandler {
         self.engine = Some(RuleEngine::new(self.config.clone()));
         debug!(
             "Initialized rule engine with {} rules",
-            self.engine.as_ref().map(|e| e.rule_count()).unwrap_or(0)
+            self.engine
+                .as_ref()
+                .map_or(0, super::engine::RuleEngine::rule_count)
         );
 
         // Initialize threat log
@@ -515,6 +536,7 @@ impl ModuleContract for WafHandler {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 
@@ -741,6 +763,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_waf_stats_block_rate() {
         let stats = WafStats::new();
         assert_eq!(stats.block_rate(), 0.0);

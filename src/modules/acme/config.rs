@@ -94,6 +94,7 @@ impl Default for AcmeConfig {
 
 impl AcmeConfig {
     /// Create configuration for Let's Encrypt staging
+    #[must_use]
     pub fn letsencrypt_staging() -> Self {
         Self {
             directory_url: DirectoryUrls::letsencrypt_staging(),
@@ -102,6 +103,7 @@ impl AcmeConfig {
     }
 
     /// Create configuration for Let's Encrypt production
+    #[must_use]
     pub fn letsencrypt_production() -> Self {
         Self {
             directory_url: DirectoryUrls::letsencrypt_production(),
@@ -110,29 +112,37 @@ impl AcmeConfig {
     }
 
     /// Set contact emails
+    #[must_use]
     pub fn with_contacts(mut self, emails: Vec<String>) -> Self {
         self.contact_emails = emails;
         self
     }
 
     /// Set domains
+    #[must_use]
     pub fn with_domains(mut self, domains: Vec<String>) -> Self {
         self.domains = domains;
         self
     }
 
     /// Accept TOS
+    #[must_use]
     pub fn accept_terms(mut self) -> Self {
         self.accept_tos = true;
         self
     }
 
     /// Get timeout as Duration
+    #[must_use]
     pub fn timeout(&self) -> Duration {
         Duration::from_secs(self.timeout_secs)
     }
 
     /// Validate configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid (e.g., missing domains or contacts).
     pub fn validate(&self) -> Result<(), String> {
         if self.enabled && self.domains.is_empty() {
             return Err("No domains configured for ACME".to_string());
@@ -152,13 +162,13 @@ impl AcmeConfig {
             }
             // Basic domain validation
             if domain.contains(' ') || domain.starts_with('.') || domain.ends_with('.') {
-                return Err(format!("Invalid domain: {}", domain));
+                return Err(format!("Invalid domain: {domain}"));
             }
         }
 
         for email in &self.contact_emails {
             if !email.contains('@') {
-                return Err(format!("Invalid email: {}", email));
+                return Err(format!("Invalid email: {email}"));
             }
         }
 
@@ -171,26 +181,31 @@ pub struct DirectoryUrls;
 
 impl DirectoryUrls {
     /// Let's Encrypt staging environment
+    #[must_use]
     pub fn letsencrypt_staging() -> String {
         "https://acme-staging-v02.api.letsencrypt.org/directory".to_string()
     }
 
     /// Let's Encrypt production environment
+    #[must_use]
     pub fn letsencrypt_production() -> String {
         "https://acme-v02.api.letsencrypt.org/directory".to_string()
     }
 
-    /// ZeroSSL production
+    /// `ZeroSSL` production
+    #[must_use]
     pub fn zerossl() -> String {
         "https://acme.zerossl.com/v2/DV90".to_string()
     }
 
     /// Buypass Go SSL (staging)
+    #[must_use]
     pub fn buypass_staging() -> String {
         "https://api.test4.buypass.no/acme/directory".to_string()
     }
 
     /// Buypass Go SSL (production)
+    #[must_use]
     pub fn buypass_production() -> String {
         "https://api.buypass.com/acme/directory".to_string()
     }
@@ -308,6 +323,7 @@ impl Default for RenewalConfig {
 
 impl RenewalConfig {
     /// Get check interval as Duration
+    #[must_use]
     pub fn check_interval(&self) -> Duration {
         Duration::from_secs(self.check_interval_secs)
     }
@@ -429,7 +445,7 @@ pub enum DnsProvider {
     Cloudflare,
     /// Route53 (AWS)
     Route53,
-    /// DigitalOcean DNS
+    /// `DigitalOcean` DNS
     DigitalOcean,
     /// Google Cloud DNS
     GoogleCloud,

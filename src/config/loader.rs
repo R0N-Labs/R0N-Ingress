@@ -166,10 +166,10 @@ mod tests {
         let mut config = GatewayConfig::default();
         config.gateway.name = "saved-gateway".to_string();
 
-        let loader = ConfigLoader::new();
-        loader.save(&config, &config_path).unwrap();
+        let config_loader = ConfigLoader::new();
+        config_loader.save(&config, &config_path).unwrap();
 
-        let loaded = loader.load(&config_path).unwrap();
-        assert_eq!(loaded.gateway.name, "saved-gateway");
+        let loaded_config = config_loader.load(&config_path).unwrap();
+        assert_eq!(loaded_config.gateway.name, "saved-gateway");
     }
 }

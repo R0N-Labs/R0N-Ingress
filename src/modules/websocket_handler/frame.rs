@@ -25,11 +25,13 @@ pub enum OpCode {
 
 impl OpCode {
     /// Check if this is a control frame.
+    #[must_use]
     pub fn is_control(&self) -> bool {
         matches!(self, Self::Close | Self::Ping | Self::Pong)
     }
 
     /// Check if this is a data frame.
+    #[must_use]
     pub fn is_data(&self) -> bool {
         matches!(self, Self::Text | Self::Binary | Self::Continuation)
     }
@@ -40,7 +42,6 @@ impl From<u8> for OpCode {
         match value {
             0 => Self::Continuation,
             1 => Self::Text,
-            2 => Self::Binary,
             8 => Self::Close,
             9 => Self::Ping,
             10 => Self::Pong,
@@ -95,6 +96,7 @@ pub enum CloseCode {
 
 impl CloseCode {
     /// Check if this is a valid close code per RFC 6455.
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         let code: u16 = (*self).into();
         // Valid ranges: 1000-1011, 3000-3999, 4000-4999
@@ -102,6 +104,7 @@ impl CloseCode {
     }
 
     /// Check if this is a reserved close code.
+    #[must_use]
     pub fn is_reserved(&self) -> bool {
         let code: u16 = (*self).into();
         matches!(code, 1004 | 1005 | 1006 | 1015)
@@ -168,20 +171,17 @@ impl MessageExt for Message {
     fn opcode(&self) -> OpCode {
         match self {
             Message::Text(_) => OpCode::Text,
-            Message::Binary(_) => OpCode::Binary,
+            Message::Binary(_) | Message::Frame(_) => OpCode::Binary, // Raw frame, treat as binary
             Message::Ping(_) => OpCode::Ping,
             Message::Pong(_) => OpCode::Pong,
             Message::Close(_) => OpCode::Close,
-            Message::Frame(_) => OpCode::Binary, // Raw frame, treat as binary
         }
     }
 
     fn payload(&self) -> &[u8] {
         match self {
             Message::Text(s) => s.as_bytes(),
-            Message::Binary(b) => b,
-            Message::Ping(b) => b,
-            Message::Pong(b) => b,
+            Message::Binary(b) | Message::Ping(b) | Message::Pong(b) => b,
             Message::Close(Some(frame)) => frame.reason.as_bytes(),
             Message::Close(None) => &[],
             Message::Frame(f) => f.payload(),
@@ -343,8 +343,8 @@ mod tests {
         let ping = ping_message(vec![1, 2, 3]);
         assert!(matches!(ping, Message::Ping(_)));
 
-        let pong = pong_message(vec![1, 2, 3]);
-        assert!(matches!(pong, Message::Pong(_)));
+        let pong_msg = pong_message(vec![1, 2, 3]);
+        assert!(matches!(pong_msg, Message::Pong(_)));
     }
 
     #[test]

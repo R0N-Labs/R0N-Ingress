@@ -43,7 +43,7 @@ pub enum MqttError {
     #[error("Invalid topic filter: {0}")]
     InvalidTopicFilter(String),
 
-    /// Invalid QoS level.
+    /// Invalid `QoS` level.
     #[error("Invalid QoS level: {0}")]
     InvalidQoS(u8),
 

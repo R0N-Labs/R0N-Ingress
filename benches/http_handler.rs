@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for HTTP Handler module.
 //!
 //! Tests: Request parsing, response building, route matching (exact/wildcard/param/glob),

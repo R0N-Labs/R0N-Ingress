@@ -6,6 +6,7 @@ use crate::modules::websocket_handler::error::{WebSocketError, WebSocketResult};
 use base64::Engine;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
+use std::fmt::Write;
 
 /// WebSocket magic GUID for Sec-WebSocket-Accept calculation.
 const WS_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -206,18 +207,20 @@ impl UpgradeResponse {
         );
 
         if let Some(ref protocol) = self.protocol {
-            response.push_str(&format!("Sec-WebSocket-Protocol: {protocol}\r\n"));
+            write!(response, "Sec-WebSocket-Protocol: {protocol}\r\n").unwrap();
         }
 
         if !self.extensions.is_empty() {
-            response.push_str(&format!(
+            write!(
+                response,
                 "Sec-WebSocket-Extensions: {}\r\n",
                 self.extensions.join(", ")
-            ));
+            )
+            .unwrap();
         }
 
         for (name, value) in &self.headers {
-            response.push_str(&format!("{name}: {value}\r\n"));
+            write!(response, "{name}: {value}\r\n").unwrap();
         }
 
         response.push_str("\r\n");

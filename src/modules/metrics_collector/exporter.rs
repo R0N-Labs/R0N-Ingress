@@ -51,6 +51,10 @@ impl PrometheusExporter {
     }
 
     /// Start the HTTP server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server is already running or the bind address is unavailable.
     pub async fn start(&mut self) -> MetricsResult<()> {
         if self.shutdown_tx.is_some() {
             return Err(MetricsError::AlreadyRunning);
@@ -96,7 +100,7 @@ impl PrometheusExporter {
                                         let auth = auth.clone();
 
                                         async move {
-                                            handle_request(req, &registry, &metrics_path, auth.as_ref()).await
+                                            handle_request(req, &registry, &metrics_path, auth.as_ref())
                                         }
                                     });
 
@@ -125,6 +129,10 @@ impl PrometheusExporter {
     }
 
     /// Stop the HTTP server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server is not running.
     pub async fn stop(&mut self) -> MetricsResult<()> {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(()).await;
@@ -148,7 +156,8 @@ impl PrometheusExporter {
 }
 
 /// Handle an HTTP request.
-async fn handle_request(
+#[allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
+fn handle_request(
     req: Request<Incoming>,
     registry: &MetricsRegistry,
     metrics_path: &str,
@@ -182,8 +191,7 @@ async fn handle_request(
             .expect("response build failed"))
     } else if path == "/" {
         let body = format!(
-            "<html><body><h1>R0N Gateway Metrics</h1><p><a href=\"{}\">Metrics</a></p></body></html>",
-            metrics_path
+            "<html><body><h1>R0N Gateway Metrics</h1><p><a href=\"{metrics_path}\">Metrics</a></p></body></html>"
         );
         Ok(Response::builder()
             .status(StatusCode::OK)
@@ -200,14 +208,12 @@ async fn handle_request(
 
 /// Check basic authentication.
 fn check_auth(req: &Request<Incoming>, auth: &super::config::AuthConfig) -> bool {
-    let auth_header = match req.headers().get("Authorization") {
-        Some(h) => h,
-        None => return false,
+    let Some(auth_header) = req.headers().get("Authorization") else {
+        return false;
     };
 
-    let auth_str = match auth_header.to_str() {
-        Ok(s) => s,
-        Err(_) => return false,
+    let Ok(auth_str) = auth_header.to_str() else {
+        return false;
     };
 
     if !auth_str.starts_with("Basic ") {
@@ -215,9 +221,8 @@ fn check_auth(req: &Request<Incoming>, auth: &super::config::AuthConfig) -> bool
     }
 
     let encoded = &auth_str[6..];
-    let decoded = match base64_decode(encoded) {
-        Some(d) => d,
-        None => return false,
+    let Some(decoded) = base64_decode(encoded) else {
+        return false;
     };
 
     let expected = format!("{}:{}", auth.username, auth.password);
@@ -225,6 +230,7 @@ fn check_auth(req: &Request<Incoming>, auth: &super::config::AuthConfig) -> bool
 }
 
 /// Simple base64 decode for basic auth.
+#[allow(clippy::cast_possible_truncation)]
 fn base64_decode(input: &str) -> Option<String> {
     // Simple base64 decoder for ASCII credentials
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

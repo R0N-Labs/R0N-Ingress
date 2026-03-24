@@ -9,13 +9,25 @@ use std::time::{Duration, Instant};
 /// Trait for distributed state backends.
 pub trait DistributedState: Send + Sync {
     /// Get the current token count for a key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot retrieve the token count.
     fn get_tokens(&self, key: &str) -> RateLimitResult<Option<f64>>;
 
     /// Set the token count for a key with TTL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot store the token count.
     fn set_tokens(&self, key: &str, tokens: f64, ttl: Duration) -> RateLimitResult<()>;
 
     /// Atomically consume tokens if available.
     /// Returns the new token count if successful, None if not enough tokens.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot perform the atomic operation.
     fn consume_tokens(
         &self,
         key: &str,
@@ -26,12 +38,24 @@ pub trait DistributedState: Send + Sync {
     ) -> RateLimitResult<Option<f64>>;
 
     /// Increment a counter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot increment the counter.
     fn increment(&self, key: &str, ttl: Duration) -> RateLimitResult<u64>;
 
     /// Get a counter value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot retrieve the counter.
     fn get_count(&self, key: &str) -> RateLimitResult<u64>;
 
     /// Delete a key.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot delete the key.
     fn delete(&self, key: &str) -> RateLimitResult<()>;
 
     /// Check if the backend is healthy.
@@ -74,6 +98,10 @@ impl LocalState {
     }
 
     /// Clean up expired entries.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal `RwLock` is poisoned.
     pub fn cleanup_expired(&self) {
         let now = Instant::now();
 
@@ -89,6 +117,10 @@ impl LocalState {
     }
 
     /// Get the number of entries.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal `RwLock` is poisoned.
     #[must_use]
     pub fn entry_count(&self) -> usize {
         self.tokens.read().unwrap().len() + self.counters.read().unwrap().len()
@@ -102,6 +134,7 @@ impl Default for LocalState {
 }
 
 impl DistributedState for LocalState {
+    #[allow(clippy::cast_precision_loss)]
     fn get_tokens(&self, key: &str) -> RateLimitResult<Option<f64>> {
         let tokens = self.tokens.read().unwrap();
 
@@ -136,6 +169,7 @@ impl DistributedState for LocalState {
         Ok(())
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn consume_tokens(
         &self,
         key: &str,
@@ -255,6 +289,14 @@ impl RedisState {
     }
 
     /// Connect to Redis.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection cannot be established.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal `RwLock` is poisoned.
     pub fn connect(&self) -> RateLimitResult<()> {
         // In a real implementation, this would establish a Redis connection
         // For now, we just mark as connected
@@ -263,6 +305,10 @@ impl RedisState {
     }
 
     /// Disconnect from Redis.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal `RwLock` is poisoned.
     pub fn disconnect(&self) {
         *self.connected.write().unwrap() = false;
     }

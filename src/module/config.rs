@@ -106,7 +106,7 @@ impl ModuleConfig {
         self.values.is_empty()
     }
 
-    /// Creates a ModuleConfig from a raw TOML string.
+    /// Creates a `ModuleConfig` from a raw TOML string.
     #[must_use]
     pub fn from_raw(raw: String) -> Self {
         Self {

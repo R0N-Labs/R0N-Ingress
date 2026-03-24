@@ -120,6 +120,7 @@ pub struct PoolStats {
 impl PoolStats {
     /// Get hit rate.
     #[inline]
+    #[allow(clippy::cast_precision_loss)]
     pub fn hit_rate(&self) -> f64 {
         let hits = self.hits.load(Ordering::Relaxed);
         let misses = self.misses.load(Ordering::Relaxed);
@@ -154,7 +155,7 @@ impl std::fmt::Debug for BufferPool {
             .field("small_size", &self.small_size)
             .field("medium_size", &self.medium_size)
             .field("large_size", &self.large_size)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -167,7 +168,7 @@ impl Default for BufferPool {
 // Default buffer sizes for the pool
 const DEFAULT_SMALL_SIZE: usize = 4096;
 const DEFAULT_MEDIUM_SIZE: usize = 65536;
-const DEFAULT_LARGE_SIZE: usize = 1048576;
+const DEFAULT_LARGE_SIZE: usize = 1_048_576;
 
 fn create_small_buffer() -> Vec<u8> {
     Vec::with_capacity(DEFAULT_SMALL_SIZE)
@@ -289,7 +290,7 @@ impl std::fmt::Debug for PooledBuffer {
         f.debug_struct("PooledBuffer")
             .field("len", &self.buffer.len())
             .field("capacity", &self.buffer.capacity())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -314,11 +315,13 @@ unsafe impl Send for Arena {}
 
 impl Arena {
     /// Create a new arena with default chunk size (64KB).
+    #[must_use]
     pub fn new() -> Self {
         Self::with_chunk_size(65536)
     }
 
     /// Create an arena with custom chunk size.
+    #[must_use]
     pub fn with_chunk_size(size: usize) -> Self {
         Self {
             current: UnsafeCell::new(ArenaChunk::new(size)),
@@ -354,7 +357,7 @@ impl Arena {
         let ptr = self.alloc(std::mem::size_of::<T>());
         // Safety: ptr is properly aligned and valid
         unsafe {
-            let typed_ptr = ptr.as_ptr() as *mut T;
+            let typed_ptr = ptr.as_ptr().cast::<T>();
             std::ptr::write(typed_ptr, val);
             &mut *typed_ptr
         }
@@ -371,7 +374,7 @@ impl Arena {
         let ptr = self.alloc(size);
         // Safety: ptr is properly sized and aligned
         unsafe {
-            let typed_ptr = ptr.as_ptr() as *mut T;
+            let typed_ptr = ptr.as_ptr().cast::<T>();
             std::ptr::copy_nonoverlapping(slice.as_ptr(), typed_ptr, slice.len());
             std::slice::from_raw_parts_mut(typed_ptr, slice.len())
         }
@@ -404,7 +407,7 @@ impl Arena {
     /// Reset the arena, invalidating all allocations.
     ///
     /// # Safety
-    /// All pointers returned by alloc() become invalid.
+    /// All pointers returned by `alloc()` become invalid.
     pub unsafe fn reset(&self) {
         if let Ok(mut chunks) = self.chunks.lock() {
             chunks.clear();
@@ -490,6 +493,7 @@ impl Default for ArenaAllocator {
 impl ArenaAllocator {
     /// Create a new arena allocator.
     #[allow(clippy::arc_with_non_send_sync)]
+    #[must_use]
     pub fn new() -> Self {
         Self {
             arena: Arc::new(Arena::new()),
@@ -498,6 +502,7 @@ impl ArenaAllocator {
 
     /// Create with custom chunk size.
     #[allow(clippy::arc_with_non_send_sync)]
+    #[must_use]
     pub fn with_chunk_size(size: usize) -> Self {
         Self {
             arena: Arc::new(Arena::with_chunk_size(size)),
@@ -515,6 +520,7 @@ impl ArenaAllocator {
     }
 
     /// Get total allocated.
+    #[must_use]
     pub fn total_allocated(&self) -> usize {
         self.arena.total_allocated()
     }
@@ -600,6 +606,7 @@ impl<T> SlabAllocator<T> {
     }
 
     /// Allocate an object.
+    #[must_use]
     pub fn alloc(&self) -> Box<T> {
         self.slab.alloc()
     }
@@ -610,6 +617,7 @@ impl<T> SlabAllocator<T> {
     }
 
     /// Get statistics.
+    #[must_use]
     pub fn stats(&self) -> &PoolStats {
         self.slab.stats()
     }

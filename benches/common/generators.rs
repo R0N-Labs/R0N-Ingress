@@ -1,3 +1,4 @@
+#![allow(clippy::all, clippy::pedantic)]
 //! Test data generators for benchmarks.
 //!
 //! Provides realistic test data for HTTP requests, IP addresses, WAF payloads,

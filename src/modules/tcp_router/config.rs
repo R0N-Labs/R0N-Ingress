@@ -90,7 +90,7 @@ pub struct ListenerConfig {
 }
 
 fn default_bind_address() -> IpAddr {
-    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+    IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 }
 
 fn default_true() -> bool {
@@ -396,11 +396,11 @@ mod tests {
     #[test]
     fn test_listener_config() {
         let listener = ListenerConfig::new(8080)
-            .with_address(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+            .with_address(IpAddr::V4(Ipv4Addr::LOCALHOST))
             .with_name("http");
 
         assert_eq!(listener.port, 8080);
-        assert_eq!(listener.address, IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
+        assert_eq!(listener.address, IpAddr::V4(Ipv4Addr::LOCALHOST));
         assert_eq!(listener.name, Some("http".to_string()));
     }
 
@@ -408,10 +408,7 @@ mod tests {
     fn test_route_config() {
         let route = RouteConfig::new("web")
             .with_match(MatchCriteria::port(8080))
-            .with_backend(BackendConfig::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                3000,
-            ));
+            .with_backend(BackendConfig::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3000));
 
         assert_eq!(route.name, "web");
         assert_eq!(route.match_criteria.port, Some(8080));

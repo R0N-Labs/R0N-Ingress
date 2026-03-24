@@ -36,8 +36,7 @@ mod tests {
     #[test]
     fn test_module_exports() {
         // Verify key types are exported
-        let _config = LoggingConfig::default();
-        let _level = LogLevel::Info;
-        let _format = LogFormat::Json;
+        let _ = LoggingConfig::default();
+        let _ = LogLevel::Info;
     }
 }

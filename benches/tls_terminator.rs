@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the TLS Terminator module.
 //!
 //! Note: The TLS Terminator module does not publicly export CertificateConfig

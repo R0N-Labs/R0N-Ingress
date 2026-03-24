@@ -1,4 +1,4 @@
-//! MQTT handler implementing ModuleContract.
+//! MQTT handler implementing `ModuleContract`.
 
 use super::config::{BackendConfig, ListenerConfig, MqttHandlerConfig, ProtocolVersion};
 use super::error::MqttResult;
@@ -56,6 +56,7 @@ pub struct MqttStats {
 
 impl MqttStats {
     /// Create new stats.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -157,12 +158,13 @@ pub struct TopicRoute {
 pub struct ClientSubscription {
     /// Client ID.
     pub client_id: String,
-    /// QoS level.
+    /// `QoS` level.
     pub qos: QoS,
 }
 
 impl TopicRouter {
     /// Create a new topic router.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             routes: Vec::new(),
@@ -183,6 +185,7 @@ impl TopicRouter {
     }
 
     /// Find a route for a topic.
+    #[must_use]
     pub fn find_route(&self, topic: &str) -> Option<&TopicRoute> {
         self.routes
             .iter()
@@ -190,6 +193,7 @@ impl TopicRouter {
     }
 
     /// Find route or default.
+    #[must_use]
     pub fn route_or_default(&self, topic: &str) -> Option<&BackendConfig> {
         self.find_route(topic)
             .map(|r| &r.backend)
@@ -213,6 +217,7 @@ impl TopicRouter {
     }
 
     /// Find all subscribers for a topic.
+    #[must_use]
     pub fn find_subscribers(&self, topic: &TopicName) -> Vec<ClientSubscription> {
         self.subscriptions.find_matches(topic)
     }
@@ -269,7 +274,7 @@ impl MqttHandler {
     pub fn with_config(config: MqttHandlerConfig) -> Self {
         let sessions = Arc::new(SessionManager::new(
             config.session.max_sessions,
-            Duration::from_secs(config.session.expiry_interval as u64),
+            Duration::from_secs(u64::from(config.session.expiry_interval)),
         ));
 
         Self {
@@ -290,6 +295,7 @@ impl MqttHandler {
     }
 
     /// Handle an MQTT connection.
+    #[allow(clippy::too_many_lines)]
     async fn handle_connection(
         mut stream: TcpStream,
         config: MqttHandlerConfig,
@@ -301,14 +307,14 @@ impl MqttHandler {
         debug!(peer = ?peer_addr, "New MQTT connection");
 
         let mut buf = BytesMut::with_capacity(config.limits.max_packet_size);
-        let mut state: Option<ConnectionState> = None;
+        let mut conn_state: Option<ConnectionState> = None;
         let mut protocol_version: u8 = 4; // Default to MQTT 3.1.1
 
         loop {
             // Read data
             let mut temp_buf = vec![0u8; 8192];
 
-            let timeout = if state.is_none() {
+            let timeout = if conn_state.is_none() {
                 config.limits.connect_timeout
             } else {
                 config.limits.idle_timeout
@@ -341,9 +347,8 @@ impl MqttHandler {
                 }
 
                 // Peek at remaining length to determine full packet size
-                let packet_size = match Self::peek_packet_size(&buf) {
-                    Some(size) => size,
-                    None => break, // Need more data
+                let Some(packet_size) = Self::peek_packet_size(&buf) else {
+                    break;
                 };
 
                 if packet_size > config.limits.max_packet_size {
@@ -373,18 +378,15 @@ impl MqttHandler {
                 };
 
                 // Handle packet based on state
-                let response = match state.as_mut() {
+                let response = match conn_state.as_mut() {
                     None => {
                         // Must be CONNECT
-                        match packet {
-                            MqttPacket::Connect(connect) => {
-                                protocol_version = connect.protocol_level;
-                                Self::handle_connect(connect, &config, &sessions, &stats).await
-                            },
-                            _ => {
-                                warn!("Expected CONNECT, got {:?}", packet.packet_type());
-                                break;
-                            },
+                        if let MqttPacket::Connect(connect) = packet {
+                            protocol_version = connect.protocol_level;
+                            Self::handle_connect(connect, &config, &sessions, &stats).await
+                        } else {
+                            warn!("Expected CONNECT, got {:?}", packet.packet_type());
+                            break;
                         }
                     },
                     Some(conn) => Self::handle_packet(packet, conn, &router, &config, &stats).await,
@@ -418,7 +420,7 @@ impl MqttHandler {
                             break;
                         }
 
-                        state = Some(ConnectionState {
+                        conn_state = Some(ConnectionState {
                             client_id: session.client_id.clone(),
                             protocol_version: version,
                             connected: true,
@@ -441,7 +443,7 @@ impl MqttHandler {
         }
 
         // Cleanup on disconnect
-        if let Some(conn) = state.take() {
+        if let Some(conn) = conn_state.take() {
             debug!(client_id = %conn.client_id, "Client disconnected");
             stats.connection_closed();
 
@@ -456,10 +458,10 @@ impl MqttHandler {
             }
 
             // Store or remove session based on clean_session flag
-            if !conn.session.clean_session {
-                sessions.store(conn.session).await;
-            } else {
+            if conn.session.clean_session {
                 sessions.remove(&conn.client_id).await;
+            } else {
+                sessions.store(conn.session).await;
             }
         }
     }
@@ -538,7 +540,7 @@ impl MqttHandler {
             .await;
 
         session.clean_session = connect.clean_session;
-        session.keep_alive = Duration::from_secs(connect.keep_alive as u64);
+        session.keep_alive = Duration::from_secs(u64::from(connect.keep_alive));
 
         // Set will message
         if let Some(will) = connect.will {
@@ -558,7 +560,7 @@ impl MqttHandler {
         // Set MQTT 5.0 specific options
         if connect.protocol_level >= 5 {
             if let Some(expiry) = session.properties.session_expiry_interval() {
-                session.expiry_interval = Duration::from_secs(expiry as u64);
+                session.expiry_interval = Duration::from_secs(u64::from(expiry));
             }
             if let Some(recv_max) = session.properties.receive_maximum() {
                 session.receive_maximum = recv_max;
@@ -578,31 +580,31 @@ impl MqttHandler {
     /// Handle a packet from a connected client.
     async fn handle_packet(
         packet: MqttPacket,
-        state: &mut ConnectionState,
+        conn_state: &mut ConnectionState,
         router: &RwLock<TopicRouter>,
         config: &MqttHandlerConfig,
         stats: &MqttStats,
     ) -> PacketResult {
-        state.session.touch();
+        conn_state.session.touch();
 
         match packet {
             MqttPacket::Publish(publish) => {
-                Self::handle_publish(publish, state, router, config, stats).await
+                Self::handle_publish(publish, conn_state, router, config, stats).await
             },
-            MqttPacket::PubAck(puback) => Self::handle_puback(puback, state),
-            MqttPacket::PubRec(pubrec) => Self::handle_pubrec(pubrec, state),
-            MqttPacket::PubRel(pubrel) => Self::handle_pubrel(pubrel, state),
-            MqttPacket::PubComp(pubcomp) => Self::handle_pubcomp(pubcomp, state),
+            MqttPacket::PubAck(puback) => Self::handle_puback(puback, conn_state),
+            MqttPacket::PubRec(pubrec) => Self::handle_pubrec(pubrec, conn_state),
+            MqttPacket::PubRel(pubrel) => Self::handle_pubrel(pubrel, conn_state),
+            MqttPacket::PubComp(pubcomp) => Self::handle_pubcomp(pubcomp, conn_state),
             MqttPacket::Subscribe(subscribe) => {
-                Self::handle_subscribe(subscribe, state, router, config, stats).await
+                Self::handle_subscribe(subscribe, conn_state, router, config, stats).await
             },
             MqttPacket::Unsubscribe(unsubscribe) => {
-                Self::handle_unsubscribe(unsubscribe, state, router, stats).await
+                Self::handle_unsubscribe(unsubscribe, conn_state, router, stats).await
             },
             MqttPacket::PingReq => PacketResult::Respond(vec![MqttPacket::PingResp]),
             MqttPacket::Disconnect(_) => {
                 // Clear will message on clean disconnect
-                state.session.will = None;
+                conn_state.session.will = None;
                 PacketResult::Disconnect
             },
             _ => {
@@ -615,7 +617,7 @@ impl MqttHandler {
     /// Handle PUBLISH packet.
     async fn handle_publish(
         publish: Publish,
-        state: &mut ConnectionState,
+        conn_state: &mut ConnectionState,
         router: &RwLock<TopicRouter>,
         config: &MqttHandlerConfig,
         stats: &MqttStats,
@@ -646,9 +648,8 @@ impl MqttHandler {
         }
 
         // Route the message to subscribers
-        let topic = match TopicName::new(&publish.topic) {
-            Ok(t) => t,
-            Err(_) => return PacketResult::None,
+        let Ok(topic) = TopicName::new(&publish.topic) else {
+            return PacketResult::None;
         };
 
         let router = router.read().await;
@@ -676,7 +677,7 @@ impl MqttHandler {
             },
             QoS::ExactlyOnce => {
                 if let Some(packet_id) = publish.packet_id {
-                    state.session.record_inbound(packet_id, publish);
+                    conn_state.session.record_inbound(packet_id, publish);
                     PacketResult::Respond(vec![MqttPacket::PubRec(PubRec::new(packet_id))])
                 } else {
                     PacketResult::None
@@ -686,37 +687,41 @@ impl MqttHandler {
     }
 
     /// Handle PUBACK packet.
-    fn handle_puback(puback: PubAck, state: &mut ConnectionState) -> PacketResult {
+    #[allow(clippy::needless_pass_by_value)]
+    fn handle_puback(puback: PubAck, conn_state: &mut ConnectionState) -> PacketResult {
         debug!(packet_id = puback.packet_id, "Received PUBACK");
         // Remove from pending outbound
-        state.session.inflight_count = state.session.inflight_count.saturating_sub(1);
+        conn_state.session.inflight_count = conn_state.session.inflight_count.saturating_sub(1);
         PacketResult::None
     }
 
     /// Handle PUBREC packet.
-    fn handle_pubrec(pubrec: PubRec, _state: &mut ConnectionState) -> PacketResult {
+    #[allow(clippy::needless_pass_by_value)]
+    fn handle_pubrec(pubrec: PubRec, _conn_state: &mut ConnectionState) -> PacketResult {
         debug!(packet_id = pubrec.packet_id, "Received PUBREC");
         PacketResult::Respond(vec![MqttPacket::PubRel(PubRel::new(pubrec.packet_id))])
     }
 
     /// Handle PUBREL packet.
-    fn handle_pubrel(pubrel: PubRel, state: &mut ConnectionState) -> PacketResult {
+    #[allow(clippy::needless_pass_by_value)]
+    fn handle_pubrel(pubrel: PubRel, conn_state: &mut ConnectionState) -> PacketResult {
         debug!(packet_id = pubrel.packet_id, "Received PUBREL");
-        state.session.complete_inbound(pubrel.packet_id);
+        conn_state.session.complete_inbound(pubrel.packet_id);
         PacketResult::Respond(vec![MqttPacket::PubComp(PubComp::new(pubrel.packet_id))])
     }
 
     /// Handle PUBCOMP packet.
-    fn handle_pubcomp(pubcomp: PubComp, state: &mut ConnectionState) -> PacketResult {
+    #[allow(clippy::needless_pass_by_value)]
+    fn handle_pubcomp(pubcomp: PubComp, conn_state: &mut ConnectionState) -> PacketResult {
         debug!(packet_id = pubcomp.packet_id, "Received PUBCOMP");
-        state.session.inflight_count = state.session.inflight_count.saturating_sub(1);
+        conn_state.session.inflight_count = conn_state.session.inflight_count.saturating_sub(1);
         PacketResult::None
     }
 
     /// Handle SUBSCRIBE packet.
     async fn handle_subscribe(
         subscribe: Subscribe,
-        state: &mut ConnectionState,
+        conn_state: &mut ConnectionState,
         router: &RwLock<TopicRouter>,
         config: &MqttHandlerConfig,
         stats: &MqttStats,
@@ -744,7 +749,7 @@ impl MqttHandler {
             }
 
             // Check subscription limit
-            if state.session.subscriptions.len() >= config.limits.max_subscriptions {
+            if conn_state.session.subscriptions.len() >= config.limits.max_subscriptions {
                 reason_codes.push(0x97); // Quota exceeded
                 continue;
             }
@@ -754,7 +759,7 @@ impl MqttHandler {
             let qos = QoS::from_u8(granted_qos).unwrap_or(QoS::AtMostOnce);
 
             // Add subscription
-            state.session.subscribe(
+            conn_state.session.subscribe(
                 sub.topic_filter.clone(),
                 qos,
                 SubscriptionOptions {
@@ -764,10 +769,10 @@ impl MqttHandler {
                 },
             );
 
-            router.subscribe(&state.client_id, &filter, qos);
+            router.subscribe(&conn_state.client_id, &filter, qos);
 
             debug!(
-                client_id = %state.client_id,
+                client_id = %conn_state.client_id,
                 filter = %sub.topic_filter,
                 qos = granted_qos,
                 "Subscription added"
@@ -786,7 +791,7 @@ impl MqttHandler {
     /// Handle UNSUBSCRIBE packet.
     async fn handle_unsubscribe(
         unsubscribe: Unsubscribe,
-        state: &mut ConnectionState,
+        conn_state: &mut ConnectionState,
         router: &RwLock<TopicRouter>,
         stats: &MqttStats,
     ) -> PacketResult {
@@ -796,9 +801,9 @@ impl MqttHandler {
         let mut router = router.write().await;
 
         for filter_str in &unsubscribe.topic_filters {
-            if state.session.unsubscribe(filter_str) {
+            if conn_state.session.unsubscribe(filter_str) {
                 debug!(
-                    client_id = %state.client_id,
+                    client_id = %conn_state.client_id,
                     filter = %filter_str,
                     "Subscription removed"
                 );
@@ -811,7 +816,7 @@ impl MqttHandler {
             if let Ok(_filter) = TopicFilter::new(filter_str.clone()) {
                 router
                     .subscriptions
-                    .remove_if(|s| s.client_id == state.client_id);
+                    .remove_if(|s| s.client_id == conn_state.client_id);
             }
         }
 
@@ -831,16 +836,13 @@ impl MqttHandler {
         stats: Arc<MqttStats>,
         mut shutdown_rx: mpsc::Receiver<()>,
     ) {
-        let addr = match listener_config.socket_addr() {
-            Some(addr) => addr,
-            None => {
-                error!(
-                    address = %listener_config.address,
-                    port = %listener_config.port,
-                    "Invalid listener address"
-                );
-                return;
-            },
+        let Some(addr) = listener_config.socket_addr() else {
+            error!(
+                address = %listener_config.address,
+                port = %listener_config.port,
+                "Invalid listener address"
+            );
+            return;
         };
 
         let listener = match TcpListener::bind(addr).await {
@@ -1082,6 +1084,7 @@ impl ModuleContract for MqttHandler {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 

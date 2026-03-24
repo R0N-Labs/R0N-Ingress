@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for HTTP/3 and QUIC modules.
 //!
 //! Tests: Frame encoding/decoding, settings construction, frame type handling.

@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the IPC system.
 //!
 //! Tests: MessagePack serialization/deserialization, ControlMessage construction,

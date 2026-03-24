@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum ControlCommand {
     /// Initialize module with configuration.
     Init {
-        /// Configuration data as MessagePack bytes.
+        /// Configuration data as `MessagePack` bytes.
         config: Vec<u8>,
     },
 
@@ -25,7 +25,7 @@ pub enum ControlCommand {
 
     /// Reload configuration.
     Reload {
-        /// New configuration data as MessagePack bytes.
+        /// New configuration data as `MessagePack` bytes.
         config: Vec<u8>,
     },
 
@@ -67,7 +67,7 @@ impl ControlMessage {
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
+            .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
             .unwrap_or(0);
 
         Self {
@@ -88,7 +88,7 @@ impl ControlMessage {
         }
     }
 
-    /// Serializes the message to MessagePack bytes.
+    /// Serializes the message to `MessagePack` bytes.
     ///
     /// # Errors
     ///
@@ -108,7 +108,7 @@ impl ControlMessage {
         rmp_serde::encode::write(buf, self)
     }
 
-    /// Deserializes a message from MessagePack bytes.
+    /// Deserializes a message from `MessagePack` bytes.
     ///
     /// # Errors
     ///
@@ -206,7 +206,7 @@ impl ControlResponse {
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
+            .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
             .unwrap_or(0);
 
         Self {
@@ -218,7 +218,7 @@ impl ControlResponse {
         }
     }
 
-    /// Serializes the response to MessagePack bytes.
+    /// Serializes the response to `MessagePack` bytes.
     ///
     /// # Errors
     ///
@@ -238,7 +238,7 @@ impl ControlResponse {
         rmp_serde::encode::write(buf, self)
     }
 
-    /// Deserializes a response from MessagePack bytes.
+    /// Deserializes a response from `MessagePack` bytes.
     ///
     /// # Errors
     ///
@@ -263,7 +263,7 @@ pub const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
 #[cfg(unix)]
 #[must_use]
 pub fn encode_frame(data: &[u8]) -> Vec<u8> {
-    let len = data.len() as u32;
+    let len = u32::try_from(data.len()).expect("message data exceeds u32::MAX");
     let mut frame = Vec::with_capacity(FRAME_HEADER_SIZE + data.len());
     frame.extend_from_slice(&len.to_be_bytes());
     frame.extend_from_slice(data);
@@ -277,8 +277,8 @@ pub fn encode_frame(data: &[u8]) -> Vec<u8> {
 /// Returns `None` if the header is invalid or the message is too large.
 #[cfg(unix)]
 #[must_use]
-pub fn decode_frame_length(header: &[u8; FRAME_HEADER_SIZE]) -> Option<usize> {
-    let len = u32::from_be_bytes(*header) as usize;
+pub fn decode_frame_length(header: [u8; FRAME_HEADER_SIZE]) -> Option<usize> {
+    let len = u32::from_be_bytes(header) as usize;
     if len <= MAX_MESSAGE_SIZE {
         Some(len)
     } else {
@@ -321,7 +321,7 @@ mod tests {
         let mut header = [0u8; FRAME_HEADER_SIZE];
         header.copy_from_slice(&frame[..FRAME_HEADER_SIZE]);
 
-        let len = decode_frame_length(&header).unwrap();
+        let len = decode_frame_length(header).unwrap();
         assert_eq!(len, data.len());
     }
 }

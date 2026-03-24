@@ -1,4 +1,4 @@
-#![allow(clippy::all)]
+#![allow(clippy::all, clippy::pedantic)]
 //! Benchmarks for the L4 Passthrough module.
 //!
 //! Tests: Connection tracking, connection state transitions,

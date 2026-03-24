@@ -38,6 +38,7 @@ pub struct Certificate {
 
 impl Certificate {
     /// Create a new certificate
+    #[must_use]
     pub fn new(
         domains: Vec<String>,
         certificate_pem: String,
@@ -63,6 +64,7 @@ impl Certificate {
     }
 
     /// Check if certificate is expired
+    #[must_use]
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -72,6 +74,7 @@ impl Certificate {
     }
 
     /// Check if certificate needs renewal
+    #[must_use]
     pub fn needs_renewal(&self, days_before_expiry: u32) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -79,11 +82,13 @@ impl Certificate {
             .as_secs();
         let renewal_threshold = self
             .expires_at
-            .saturating_sub(days_before_expiry as u64 * 24 * 60 * 60);
+            .saturating_sub(u64::from(days_before_expiry) * 24 * 60 * 60);
         now >= renewal_threshold
     }
 
     /// Get days until expiry
+    #[must_use]
+    #[allow(clippy::cast_possible_wrap)]
     pub fn days_until_expiry(&self) -> i64 {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -94,11 +99,13 @@ impl Certificate {
     }
 
     /// Get the primary domain (first in list)
+    #[must_use]
     pub fn primary_domain(&self) -> &str {
-        self.domains.first().map(|s| s.as_str()).unwrap_or("")
+        self.domains.first().map_or("", std::string::String::as_str)
     }
 
     /// Check if this certificate covers a domain
+    #[must_use]
     pub fn covers_domain(&self, domain: &str) -> bool {
         for cert_domain in &self.domains {
             if cert_domain == domain {
@@ -107,7 +114,7 @@ impl Certificate {
             // Check wildcard match
             // *.example.com matches www.example.com but not example.com or a.b.example.com
             if let Some(base) = cert_domain.strip_prefix("*.") {
-                let expected_suffix = format!(".{}", base); // ".example.com"
+                let expected_suffix = format!(".{base}"); // ".example.com"
 
                 if domain.ends_with(&expected_suffix) {
                     // Get the prefix part (e.g., "www" from "www.example.com")
@@ -123,6 +130,7 @@ impl Certificate {
     }
 
     /// Get combined certificate with chain
+    #[must_use]
     pub fn full_chain(&self) -> String {
         if self.chain_pem.is_empty() {
             self.certificate_pem.clone()
@@ -135,18 +143,38 @@ impl Certificate {
 /// Certificate storage trait
 pub trait CertificateStorage: Send + Sync {
     /// Store a certificate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the certificate cannot be stored.
     fn store(&self, cert: &Certificate) -> AcmeResult<()>;
 
     /// Load a certificate by primary domain
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if loading fails.
     fn load(&self, domain: &str) -> AcmeResult<Option<Certificate>>;
 
     /// List all stored certificates
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if listing fails.
     fn list(&self) -> AcmeResult<Vec<String>>;
 
     /// Delete a certificate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if deletion fails.
     fn delete(&self, domain: &str) -> AcmeResult<()>;
 
     /// Find certificate covering a domain
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the lookup fails.
     fn find_for_domain(&self, domain: &str) -> AcmeResult<Option<Certificate>>;
 }
 
@@ -166,6 +194,10 @@ pub struct FileCertificateStorage {
 
 impl FileCertificateStorage {
     /// Create new file storage
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage directory cannot be created.
     pub fn new<P: AsRef<Path>>(base_path: P, file_mode: u32) -> AcmeResult<Self> {
         let base_path = base_path.as_ref().to_path_buf();
 
@@ -482,7 +514,7 @@ mod tests {
                 .to_string(),
             private_key_pem: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----"
                 .to_string(),
-            chain_pem: "".to_string(),
+            chain_pem: String::new(),
             issued_at: now,
             expires_at: now + 90 * 24 * 60 * 60, // 90 days
             serial: "123456".to_string(),
@@ -497,7 +529,7 @@ mod tests {
             "cert".to_string(),
             "key".to_string(),
             "chain".to_string(),
-            12345678,
+            12_345_678,
         );
 
         assert_eq!(cert.primary_domain(), "example.com");

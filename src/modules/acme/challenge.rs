@@ -19,6 +19,7 @@ pub enum ChallengeType {
 
 impl ChallengeType {
     /// Get the ACME identifier for this challenge type
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Http01 => "http-01",
@@ -28,6 +29,7 @@ impl ChallengeType {
     }
 
     /// Parse from ACME identifier string
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "http-01" => Some(Self::Http01),
@@ -76,6 +78,7 @@ pub struct Challenge {
 
 impl Challenge {
     /// Create a new challenge
+    #[must_use]
     pub fn new(challenge_type: ChallengeType, url: String, token: String, domain: String) -> Self {
         Self {
             challenge_type,
@@ -88,6 +91,7 @@ impl Challenge {
     }
 
     /// Check if challenge is complete (valid or invalid)
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         matches!(
             self.status,
@@ -96,11 +100,13 @@ impl Challenge {
     }
 
     /// Check if challenge succeeded
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         matches!(self.status, ChallengeStatus::Valid)
     }
 
     /// Check if challenge failed
+    #[must_use]
     pub fn is_invalid(&self) -> bool {
         matches!(self.status, ChallengeStatus::Invalid)
     }
@@ -124,13 +130,14 @@ pub struct ChallengeToken {
 
 impl ChallengeToken {
     /// Create a new challenge token
+    #[must_use]
     pub fn new(
         token: String,
         key_thumbprint: &str,
         challenge_type: ChallengeType,
         domain: String,
     ) -> Self {
-        let key_authorization = format!("{}.{}", token, key_thumbprint);
+        let key_authorization = format!("{token}.{key_thumbprint}");
 
         Self {
             token,
@@ -141,11 +148,13 @@ impl ChallengeToken {
     }
 
     /// Get HTTP-01 response content
+    #[must_use]
     pub fn http01_content(&self) -> &str {
         &self.key_authorization
     }
 
     /// Get DNS-01 TXT record value (base64url encoded SHA-256 of key authorization)
+    #[must_use]
     pub fn dns01_txt_value(&self) -> String {
         // SHA-256 hash of key authorization, then base64url encode
         let hash = simple_sha256(self.key_authorization.as_bytes());
@@ -153,11 +162,13 @@ impl ChallengeToken {
     }
 
     /// Get the HTTP-01 challenge path
+    #[must_use]
     pub fn http01_path(&self) -> String {
         format!("/.well-known/acme-challenge/{}", self.token)
     }
 
     /// Get the DNS-01 TXT record name
+    #[must_use]
     pub fn dns01_record_name(&self) -> String {
         format!("_acme-challenge.{}", self.domain)
     }
@@ -175,6 +186,7 @@ pub struct Http01Challenge {
 
 impl Http01Challenge {
     /// Create from challenge and key thumbprint
+    #[must_use]
     pub fn new(challenge: Challenge, key_thumbprint: &str) -> Self {
         let token = ChallengeToken::new(
             challenge.token.clone(),
@@ -187,11 +199,13 @@ impl Http01Challenge {
     }
 
     /// Get the path for HTTP response
+    #[must_use]
     pub fn path(&self) -> String {
         self.token.http01_path()
     }
 
     /// Get the response content
+    #[must_use]
     pub fn response(&self) -> &str {
         self.token.http01_content()
     }
@@ -209,6 +223,7 @@ pub struct Dns01Challenge {
 
 impl Dns01Challenge {
     /// Create from challenge and key thumbprint
+    #[must_use]
     pub fn new(challenge: Challenge, key_thumbprint: &str) -> Self {
         let token = ChallengeToken::new(
             challenge.token.clone(),
@@ -221,11 +236,13 @@ impl Dns01Challenge {
     }
 
     /// Get the TXT record name
+    #[must_use]
     pub fn record_name(&self) -> String {
         self.token.dns01_record_name()
     }
 
     /// Get the TXT record value
+    #[must_use]
     pub fn txt_value(&self) -> String {
         self.token.dns01_txt_value()
     }
@@ -234,7 +251,7 @@ impl Dns01Challenge {
 /// HTTP-01 challenge responder
 #[derive(Debug, Clone, Default)]
 pub struct Http01Responder {
-    /// Pending challenges: token -> key_authorization
+    /// Pending challenges: token -> `key_authorization`
     challenges: Arc<RwLock<HashMap<String, String>>>,
 }
 
@@ -300,6 +317,7 @@ impl Http01Responder {
 }
 
 /// Simple SHA-256 implementation (placeholder)
+#[allow(clippy::cast_possible_truncation)]
 fn simple_sha256(data: &[u8]) -> [u8; 32] {
     // This is a simplified placeholder
     // In production, use ring or sha2 crate
