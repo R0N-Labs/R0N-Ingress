@@ -1,4 +1,4 @@
-//! HTTP handler implementing ModuleContract.
+//! HTTP handler implementing `ModuleContract`.
 
 use super::config::{HttpHandlerConfig, ListenerConfig};
 use super::middleware::{
@@ -166,6 +166,7 @@ impl HttpHandler {
     }
 
     /// Handle an HTTP/1.1 connection.
+    #[allow(clippy::too_many_lines)]
     async fn handle_http1_connection(
         mut stream: TcpStream,
         router: Router,
@@ -311,16 +312,13 @@ impl HttpHandler {
         config: HttpHandlerConfig,
         mut shutdown_rx: mpsc::Receiver<()>,
     ) {
-        let addr = match listener_config.socket_addr() {
-            Some(addr) => addr,
-            None => {
-                error!(
-                    address = %listener_config.address,
-                    port = %listener_config.port,
-                    "Invalid listener address"
-                );
-                return;
-            },
+        let Some(addr) = listener_config.socket_addr() else {
+            error!(
+                address = %listener_config.address,
+                port = %listener_config.port,
+                "Invalid listener address"
+            );
+            return;
         };
 
         let listener = match TcpListener::bind(addr).await {
@@ -621,6 +619,7 @@ impl ModuleContract for HttpHandler {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 

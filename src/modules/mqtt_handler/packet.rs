@@ -21,7 +21,11 @@ pub enum QoS {
 }
 
 impl QoS {
-    /// Create QoS from byte value.
+    /// Create `QoS` from byte value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value is not a valid `QoS` level (0, 1, or 2).
     pub fn from_u8(value: u8) -> MqttResult<Self> {
         match value {
             0 => Ok(Self::AtMostOnce),
@@ -42,13 +46,13 @@ pub enum PacketType {
     ConnAck = 2,
     /// Publish message.
     Publish = 3,
-    /// Publish acknowledgment (QoS 1).
+    /// Publish acknowledgment (`QoS` 1).
     PubAck = 4,
-    /// Publish received (QoS 2, step 1).
+    /// Publish received (`QoS` 2, step 1).
     PubRec = 5,
-    /// Publish release (QoS 2, step 2).
+    /// Publish release (`QoS` 2, step 2).
     PubRel = 6,
-    /// Publish complete (QoS 2, step 3).
+    /// Publish complete (`QoS` 2, step 3).
     PubComp = 7,
     /// Subscribe request.
     Subscribe = 8,
@@ -70,6 +74,10 @@ pub enum PacketType {
 
 impl PacketType {
     /// Create packet type from byte value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value is not a valid packet type.
     pub fn from_u8(value: u8) -> MqttResult<Self> {
         match value {
             1 => Ok(Self::Connect),
@@ -132,7 +140,7 @@ pub enum ConnectReasonCode {
     PayloadFormatInvalid = 0x99,
     /// Retain not supported.
     RetainNotSupported = 0x9A,
-    /// QoS not supported.
+    /// `QoS` not supported.
     QoSNotSupported = 0x9B,
     /// Use another server.
     UseAnotherServer = 0x9C,
@@ -144,11 +152,13 @@ pub enum ConnectReasonCode {
 
 impl ConnectReasonCode {
     /// Check if connection was successful.
+    #[must_use]
     pub fn is_success(&self) -> bool {
         *self == Self::Success
     }
 
     /// Create from byte value.
+    #[must_use]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             0x00 => Some(Self::Success),
@@ -187,6 +197,7 @@ pub struct Properties {
 
 impl Properties {
     /// Create empty properties.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             values: HashMap::new(),
@@ -194,36 +205,41 @@ impl Properties {
     }
 
     /// Check if empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
 
     /// Get session expiry interval.
+    #[must_use]
     pub fn session_expiry_interval(&self) -> Option<u32> {
         self.values
             .get(&PropertyId::SessionExpiryInterval)
-            .and_then(|v| v.as_u32())
+            .and_then(PropertyValue::as_u32)
     }
 
     /// Get receive maximum.
+    #[must_use]
     pub fn receive_maximum(&self) -> Option<u16> {
         self.values
             .get(&PropertyId::ReceiveMaximum)
-            .and_then(|v| v.as_u16())
+            .and_then(PropertyValue::as_u16)
     }
 
     /// Get maximum packet size.
+    #[must_use]
     pub fn maximum_packet_size(&self) -> Option<u32> {
         self.values
             .get(&PropertyId::MaximumPacketSize)
-            .and_then(|v| v.as_u32())
+            .and_then(PropertyValue::as_u32)
     }
 
     /// Get topic alias maximum.
+    #[must_use]
     pub fn topic_alias_maximum(&self) -> Option<u16> {
         self.values
             .get(&PropertyId::TopicAliasMaximum)
-            .and_then(|v| v.as_u16())
+            .and_then(PropertyValue::as_u16)
     }
 
     /// Set a property.
@@ -232,6 +248,11 @@ impl Properties {
     }
 
     /// Parse properties from bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the properties data is malformed or incomplete.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn parse(buf: &mut impl Buf) -> MqttResult<Self> {
         let length = read_variable_int(buf)?;
         let mut remaining = length as usize;
@@ -246,7 +267,7 @@ impl Properties {
             remaining -= 1;
 
             let id = PropertyId::from_u8(id_byte).ok_or_else(|| {
-                MqttError::InvalidPacket(format!("Unknown property ID: {}", id_byte))
+                MqttError::InvalidPacket(format!("Unknown property ID: {id_byte}"))
             })?;
 
             let value = PropertyValue::parse(id, buf, &mut remaining)?;
@@ -257,6 +278,7 @@ impl Properties {
     }
 
     /// Serialize properties to bytes.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn serialize(&self, buf: &mut BytesMut) {
         if self.is_empty() {
             write_variable_int(buf, 0);
@@ -318,7 +340,7 @@ pub enum PropertyId {
     TopicAliasMaximum = 0x22,
     /// Topic alias.
     TopicAlias = 0x23,
-    /// Maximum QoS.
+    /// Maximum `QoS`.
     MaximumQoS = 0x24,
     /// Retain available.
     RetainAvailable = 0x25,
@@ -336,6 +358,7 @@ pub enum PropertyId {
 
 impl PropertyId {
     /// Create from byte value.
+    #[must_use]
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
             0x01 => Some(Self::PayloadFormatIndicator),
@@ -391,6 +414,7 @@ pub enum PropertyValue {
 
 impl PropertyValue {
     /// Get as u8.
+    #[must_use]
     pub fn as_u8(&self) -> Option<u8> {
         match self {
             Self::Byte(v) => Some(*v),
@@ -399,6 +423,7 @@ impl PropertyValue {
     }
 
     /// Get as u16.
+    #[must_use]
     pub fn as_u16(&self) -> Option<u16> {
         match self {
             Self::TwoByteInteger(v) => Some(*v),
@@ -407,6 +432,7 @@ impl PropertyValue {
     }
 
     /// Get as u32.
+    #[must_use]
     pub fn as_u32(&self) -> Option<u32> {
         match self {
             Self::FourByteInteger(v) | Self::VariableByteInteger(v) => Some(*v),
@@ -415,6 +441,7 @@ impl PropertyValue {
     }
 
     /// Get as string.
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(v) => Some(v),
@@ -492,6 +519,7 @@ impl PropertyValue {
     }
 
     /// Serialize property value.
+    #[allow(clippy::cast_possible_truncation)]
     fn serialize(&self, buf: &mut BytesMut) {
         match self {
             Self::Byte(v) => buf.put_u8(*v),
@@ -548,6 +576,7 @@ pub enum MqttPacket {
 
 impl MqttPacket {
     /// Get the packet type.
+    #[must_use]
     pub fn packet_type(&self) -> PacketType {
         match self {
             Self::Connect(_) => PacketType::Connect,
@@ -571,6 +600,10 @@ impl MqttPacket {
     /// Parse a packet from bytes.
     ///
     /// Returns the packet and the number of bytes consumed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(buf: &mut impl Buf, protocol_version: u8) -> MqttResult<Self> {
         if buf.remaining() < 2 {
             return Err(MqttError::IncompletePacket);
@@ -649,6 +682,7 @@ impl MqttPacket {
     }
 
     /// Serialize the packet to bytes.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         match self {
             Self::Connect(p) => p.serialize(),
@@ -695,13 +729,16 @@ pub struct Connect {
 
 impl Connect {
     /// Parse a CONNECT packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(buf: &mut impl Buf) -> MqttResult<Self> {
         // Protocol name
         let protocol_name = read_string(buf)?;
         if protocol_name != "MQTT" && protocol_name != "MQIsdp" {
             return Err(MqttError::Protocol(format!(
-                "Unknown protocol: {}",
-                protocol_name
+                "Unknown protocol: {protocol_name}"
             )));
         }
 
@@ -781,6 +818,7 @@ impl Connect {
     }
 
     /// Serialize a CONNECT packet.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn serialize(&self) -> BytesMut {
         let mut payload = BytesMut::new();
 
@@ -853,7 +891,7 @@ pub struct Will {
     pub topic: String,
     /// Payload.
     pub payload: Bytes,
-    /// QoS level.
+    /// `QoS` level.
     pub qos: QoS,
     /// Retain flag.
     pub retain: bool,
@@ -874,6 +912,7 @@ pub struct ConnAck {
 
 impl ConnAck {
     /// Create a success CONNACK.
+    #[must_use]
     pub fn success(session_present: bool) -> Self {
         Self {
             session_present,
@@ -883,6 +922,7 @@ impl ConnAck {
     }
 
     /// Create an error CONNACK.
+    #[must_use]
     pub fn error(reason_code: ConnectReasonCode) -> Self {
         Self {
             session_present: false,
@@ -892,6 +932,10 @@ impl ConnAck {
     }
 
     /// Parse a CONNACK packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(buf: &mut impl Buf, protocol_version: u8) -> MqttResult<Self> {
         if buf.remaining() < 2 {
             return Err(MqttError::IncompletePacket);
@@ -915,10 +959,11 @@ impl ConnAck {
     }
 
     /// Serialize a CONNACK packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
 
-        let flags = if self.session_present { 0x01 } else { 0x00 };
+        let flags = u8::from(self.session_present);
         payload.put_u8(flags);
         payload.put_u8(self.reason_code);
 
@@ -935,13 +980,13 @@ impl ConnAck {
 pub struct Publish {
     /// Duplicate delivery flag.
     pub dup: bool,
-    /// QoS level.
+    /// `QoS` level.
     pub qos: QoS,
     /// Retain flag.
     pub retain: bool,
     /// Topic name.
     pub topic: String,
-    /// Packet identifier (for QoS > 0).
+    /// Packet identifier (for `QoS` > 0).
     pub packet_id: Option<u16>,
     /// Payload.
     pub payload: Bytes,
@@ -951,6 +996,7 @@ pub struct Publish {
 
 impl Publish {
     /// Create a new PUBLISH packet.
+    #[must_use]
     pub fn new(topic: impl Into<String>, payload: impl Into<Bytes>) -> Self {
         Self {
             dup: false,
@@ -963,7 +1009,8 @@ impl Publish {
         }
     }
 
-    /// Set QoS and packet ID.
+    /// Set `QoS` and packet ID.
+    #[must_use]
     pub fn with_qos(mut self, qos: QoS, packet_id: u16) -> Self {
         self.qos = qos;
         if qos != QoS::AtMostOnce {
@@ -973,12 +1020,17 @@ impl Publish {
     }
 
     /// Set retain flag.
+    #[must_use]
     pub fn with_retain(mut self, retain: bool) -> Self {
         self.retain = retain;
         self
     }
 
     /// Parse a PUBLISH packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         flags: u8,
@@ -992,14 +1044,14 @@ impl Publish {
         let topic = read_string(buf)?;
         let mut consumed = 2 + topic.len();
 
-        let packet_id = if qos != QoS::AtMostOnce {
+        let packet_id = if qos == QoS::AtMostOnce {
+            None
+        } else {
             if buf.remaining() < 2 {
                 return Err(MqttError::IncompletePacket);
             }
             consumed += 2;
             Some(buf.get_u16())
-        } else {
-            None
         };
 
         let properties = if protocol_version >= 5 {
@@ -1030,6 +1082,7 @@ impl Publish {
     }
 
     /// Serialize a PUBLISH packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
 
@@ -1073,6 +1126,7 @@ pub struct PubAck {
 
 impl PubAck {
     /// Create a new PUBACK.
+    #[must_use]
     pub fn new(packet_id: u16) -> Self {
         Self {
             packet_id,
@@ -1082,6 +1136,10 @@ impl PubAck {
     }
 
     /// Parse a PUBACK packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1113,6 +1171,7 @@ impl PubAck {
     }
 
     /// Serialize a PUBACK packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1126,7 +1185,7 @@ impl PubAck {
     }
 }
 
-/// PUBREC packet (QoS 2, step 1).
+/// PUBREC packet (`QoS` 2, step 1).
 #[derive(Debug, Clone)]
 pub struct PubRec {
     /// Packet identifier.
@@ -1139,6 +1198,7 @@ pub struct PubRec {
 
 impl PubRec {
     /// Create a new PUBREC.
+    #[must_use]
     pub fn new(packet_id: u16) -> Self {
         Self {
             packet_id,
@@ -1148,6 +1208,10 @@ impl PubRec {
     }
 
     /// Parse a PUBREC packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1179,6 +1243,7 @@ impl PubRec {
     }
 
     /// Serialize a PUBREC packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1192,7 +1257,7 @@ impl PubRec {
     }
 }
 
-/// PUBREL packet (QoS 2, step 2).
+/// PUBREL packet (`QoS` 2, step 2).
 #[derive(Debug, Clone)]
 pub struct PubRel {
     /// Packet identifier.
@@ -1205,6 +1270,7 @@ pub struct PubRel {
 
 impl PubRel {
     /// Create a new PUBREL.
+    #[must_use]
     pub fn new(packet_id: u16) -> Self {
         Self {
             packet_id,
@@ -1214,6 +1280,10 @@ impl PubRel {
     }
 
     /// Parse a PUBREL packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1245,6 +1315,7 @@ impl PubRel {
     }
 
     /// Serialize a PUBREL packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1259,7 +1330,7 @@ impl PubRel {
     }
 }
 
-/// PUBCOMP packet (QoS 2, step 3).
+/// PUBCOMP packet (`QoS` 2, step 3).
 #[derive(Debug, Clone)]
 pub struct PubComp {
     /// Packet identifier.
@@ -1272,6 +1343,7 @@ pub struct PubComp {
 
 impl PubComp {
     /// Create a new PUBCOMP.
+    #[must_use]
     pub fn new(packet_id: u16) -> Self {
         Self {
             packet_id,
@@ -1281,6 +1353,10 @@ impl PubComp {
     }
 
     /// Parse a PUBCOMP packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1312,6 +1388,7 @@ impl PubComp {
     }
 
     /// Serialize a PUBCOMP packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1328,7 +1405,7 @@ impl PubComp {
 /// Subscription options (MQTT 5.0).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SubscriptionOptions {
-    /// Maximum QoS.
+    /// Maximum `QoS`.
     pub qos: QoS,
     /// No local flag.
     pub no_local: bool,
@@ -1340,6 +1417,10 @@ pub struct SubscriptionOptions {
 
 impl SubscriptionOptions {
     /// Parse from byte.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `QoS` value in the byte is invalid.
     pub fn from_byte(byte: u8) -> MqttResult<Self> {
         Ok(Self {
             qos: QoS::from_u8(byte & 0x03)?,
@@ -1350,6 +1431,7 @@ impl SubscriptionOptions {
     }
 
     /// Convert to byte.
+    #[must_use]
     pub fn to_byte(&self) -> u8 {
         let mut byte = self.qos as u8;
         if self.no_local {
@@ -1385,6 +1467,10 @@ pub struct Subscribe {
 
 impl Subscribe {
     /// Parse a SUBSCRIBE packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1432,6 +1518,7 @@ impl Subscribe {
     }
 
     /// Serialize a SUBSCRIBE packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1463,6 +1550,10 @@ pub struct SubAck {
 
 impl SubAck {
     /// Parse a SUBACK packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1502,6 +1593,7 @@ impl SubAck {
     }
 
     /// Serialize a SUBACK packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1531,6 +1623,10 @@ pub struct Unsubscribe {
 
 impl Unsubscribe {
     /// Parse an UNSUBSCRIBE packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1567,6 +1663,7 @@ impl Unsubscribe {
     }
 
     /// Serialize an UNSUBSCRIBE packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1597,6 +1694,10 @@ pub struct UnsubAck {
 
 impl UnsubAck {
     /// Parse an UNSUBACK packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1632,6 +1733,7 @@ impl UnsubAck {
     }
 
     /// Serialize an UNSUBACK packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
         payload.put_u16(self.packet_id);
@@ -1667,6 +1769,10 @@ impl Default for Disconnect {
 
 impl Disconnect {
     /// Parse a DISCONNECT packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(
         buf: &mut impl Buf,
         remaining_length: u32,
@@ -1689,6 +1795,7 @@ impl Disconnect {
     }
 
     /// Serialize a DISCONNECT packet.
+    #[must_use]
     pub fn serialize(&self, protocol_version: u8) -> BytesMut {
         let mut payload = BytesMut::new();
 
@@ -1712,6 +1819,10 @@ pub struct Auth {
 
 impl Auth {
     /// Parse an AUTH packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the packet data is malformed or incomplete.
     pub fn parse(buf: &mut impl Buf, remaining_length: u32) -> MqttResult<Self> {
         let reason_code = if remaining_length > 0 {
             buf.get_u8()
@@ -1732,6 +1843,7 @@ impl Auth {
     }
 
     /// Serialize an AUTH packet.
+    #[must_use]
     pub fn serialize(&self) -> BytesMut {
         let mut payload = BytesMut::new();
 
@@ -1749,6 +1861,10 @@ impl Auth {
 // ============================================================================
 
 /// Read a variable byte integer.
+///
+/// # Errors
+///
+/// Returns an error if the buffer is incomplete or the encoded integer is malformed.
 pub fn read_variable_int(buf: &mut impl Buf) -> MqttResult<u32> {
     let mut value: u32 = 0;
     let mut shift: u32 = 0;
@@ -1759,7 +1875,7 @@ pub fn read_variable_int(buf: &mut impl Buf) -> MqttResult<u32> {
         }
 
         let byte = buf.get_u8();
-        value |= ((byte & 0x7F) as u32) << shift;
+        value |= u32::from(byte & 0x7F) << shift;
 
         if (byte & 0x80) == 0 {
             break;
@@ -1775,6 +1891,7 @@ pub fn read_variable_int(buf: &mut impl Buf) -> MqttResult<u32> {
 }
 
 /// Write a variable byte integer.
+#[allow(clippy::cast_possible_truncation)]
 pub fn write_variable_int(buf: &mut BytesMut, mut value: u32) {
     loop {
         let mut byte = (value & 0x7F) as u8;
@@ -1793,16 +1910,21 @@ pub fn write_variable_int(buf: &mut BytesMut, mut value: u32) {
 }
 
 /// Get the length of a variable byte integer.
+#[must_use]
 pub fn variable_int_len(value: u32) -> usize {
     match value {
         0..=127 => 1,
         128..=16383 => 2,
-        16384..=2097151 => 3,
+        16_384..=2_097_151 => 3,
         _ => 4,
     }
 }
 
 /// Read a UTF-8 string.
+///
+/// # Errors
+///
+/// Returns an error if the buffer is incomplete or the string is not valid UTF-8.
 pub fn read_string(buf: &mut impl Buf) -> MqttResult<String> {
     if buf.remaining() < 2 {
         return Err(MqttError::IncompletePacket);
@@ -1819,12 +1941,17 @@ pub fn read_string(buf: &mut impl Buf) -> MqttResult<String> {
 }
 
 /// Write a UTF-8 string.
+#[allow(clippy::cast_possible_truncation)]
 pub fn write_string(buf: &mut BytesMut, s: &str) {
     buf.put_u16(s.len() as u16);
     buf.extend_from_slice(s.as_bytes());
 }
 
 /// Read binary data.
+///
+/// # Errors
+///
+/// Returns an error if the buffer is incomplete.
 pub fn read_binary(buf: &mut impl Buf) -> MqttResult<Bytes> {
     if buf.remaining() < 2 {
         return Err(MqttError::IncompletePacket);
@@ -1840,6 +1967,7 @@ pub fn read_binary(buf: &mut impl Buf) -> MqttResult<Bytes> {
 }
 
 /// Build a packet with header.
+#[allow(clippy::cast_possible_truncation)]
 fn build_packet(packet_type: PacketType, flags: u8, payload: &[u8]) -> BytesMut {
     let mut buf = BytesMut::new();
 
@@ -1908,9 +2036,9 @@ mod tests {
 
         // Round-trip test
         buf.clear();
-        write_variable_int(&mut buf, 268435455);
+        write_variable_int(&mut buf, 268_435_455);
         let mut reader = buf.freeze();
-        assert_eq!(read_variable_int(&mut reader).unwrap(), 268435455);
+        assert_eq!(read_variable_int(&mut reader).unwrap(), 268_435_455);
     }
 
     #[test]
@@ -2101,7 +2229,7 @@ mod tests {
         assert_eq!(variable_int_len(128), 2);
         assert_eq!(variable_int_len(16383), 2);
         assert_eq!(variable_int_len(16384), 3);
-        assert_eq!(variable_int_len(2097151), 3);
-        assert_eq!(variable_int_len(2097152), 4);
+        assert_eq!(variable_int_len(2_097_151), 3);
+        assert_eq!(variable_int_len(2_097_152), 4);
     }
 }

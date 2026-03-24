@@ -64,6 +64,7 @@ pub struct ConnectionInfo {
 
 impl ConnectionInfo {
     /// Create a new connection info.
+    #[must_use]
     pub fn new(
         id: u64,
         client_addr: SocketAddr,
@@ -85,16 +86,19 @@ impl ConnectionInfo {
     }
 
     /// Get connection duration.
+    #[must_use]
     pub fn duration(&self) -> std::time::Duration {
         self.connected_at.elapsed()
     }
 
     /// Get idle duration.
+    #[must_use]
     pub fn idle_duration(&self) -> std::time::Duration {
         self.last_activity.elapsed()
     }
 
     /// Total bytes transferred.
+    #[must_use]
     pub fn total_bytes(&self) -> u64 {
         self.bytes_to_client + self.bytes_to_backend
     }
@@ -182,7 +186,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
     fn make_addr(port: u16) -> SocketAddr {
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)
     }
 
     #[test]

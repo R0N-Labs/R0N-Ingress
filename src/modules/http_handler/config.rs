@@ -95,6 +95,7 @@ impl Default for ListenerConfig {
 
 impl ListenerConfig {
     /// Get the socket address for this listener.
+    #[must_use]
     pub fn socket_addr(&self) -> Option<SocketAddr> {
         format!("{}:{}", self.address, self.port).parse().ok()
     }
@@ -174,6 +175,7 @@ fn default_true() -> bool {
 
 impl BackendConfig {
     /// Get the socket address for this backend.
+    #[must_use]
     pub fn socket_addr(&self) -> Option<SocketAddr> {
         format!("{}:{}", self.address, self.port).parse().ok()
     }
@@ -455,7 +457,7 @@ mod tests {
         assert_eq!(config.listeners.len(), 2);
         assert_eq!(config.routes.len(), 1);
         assert_eq!(config.routes[0].name, "api");
-        assert_eq!(config.limits.max_body_size, 5242880);
+        assert_eq!(config.limits.max_body_size, 5_242_880);
     }
 
     #[test]

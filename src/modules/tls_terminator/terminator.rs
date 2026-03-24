@@ -75,6 +75,7 @@ impl TlsTerminator {
     }
 
     /// Handle a new TLS connection.
+    #[allow(clippy::large_futures)]
     async fn handle_connection(
         stream: tokio::net::TcpStream,
         peer_addr: SocketAddr,
@@ -109,7 +110,11 @@ impl TlsTerminator {
         };
 
         // Get SNI from the connection
-        let sni_name = tls_stream.get_ref().1.server_name().map(|s| s.to_string());
+        let sni_name = tls_stream
+            .get_ref()
+            .1
+            .server_name()
+            .map(std::string::ToString::to_string);
 
         debug!(
             peer = %peer_addr,
@@ -134,6 +139,7 @@ impl TlsTerminator {
     }
 
     /// Handle passthrough mode for a connection.
+    #[allow(clippy::large_futures)]
     async fn handle_passthrough(
         stream: tokio::net::TcpStream,
         peer_addr: SocketAddr,
@@ -161,18 +167,10 @@ impl TlsTerminator {
         let initial_data = &initial_buf[..n];
 
         // Extract SNI
-        let sni = match extract_sni_from_client_hello(initial_data) {
-            Ok(Some(sni)) => sni,
-            Ok(None) => {
-                warn!(peer = %peer_addr, "No SNI in Client Hello");
-                stats.record_connection_closed();
-                return;
-            },
-            Err(e) => {
-                error!(peer = %peer_addr, error = %e, "Failed to extract SNI");
-                stats.record_connection_closed();
-                return;
-            },
+        let Some(sni) = extract_sni_from_client_hello(initial_data) else {
+            warn!(peer = %peer_addr, "No SNI in Client Hello");
+            stats.record_connection_closed();
+            return;
         };
 
         // Route based on SNI
@@ -206,6 +204,7 @@ impl TlsTerminator {
     }
 
     /// Build TLS acceptor from SNI router.
+    #[allow(clippy::unnecessary_wraps)]
     fn build_acceptor(sni_router: Arc<SniRouter>) -> TlsResult<TlsAcceptor> {
         let config = ServerConfig::builder()
             .with_no_client_auth()
@@ -369,7 +368,10 @@ impl ModuleContract for TlsTerminator {
             let acceptor = acceptor.clone();
             let sni_router = Arc::clone(&sni_router);
             let stats = Arc::clone(&stats);
-            let backend = listener_config.backend.as_ref().map(|b| b.socket_addr());
+            let backend = listener_config
+                .backend
+                .as_ref()
+                .map(super::config::BackendConfig::socket_addr);
 
             tokio::spawn(async move {
                 let addr = listener_config.socket_addr();
@@ -396,6 +398,7 @@ impl ModuleContract for TlsTerminator {
                                 let stats = Arc::clone(&stats);
 
                                 tokio::spawn(async move {
+                                    #[allow(clippy::large_futures)]
                                     Self::handle_passthrough(stream, peer_addr, sni_router, stats)
                                         .await;
                                 });
@@ -405,6 +408,7 @@ impl ModuleContract for TlsTerminator {
                                 let stats = Arc::clone(&stats);
 
                                 tokio::spawn(async move {
+                                    #[allow(clippy::large_futures)]
                                     Self::handle_connection(
                                         stream,
                                         peer_addr,
@@ -501,6 +505,7 @@ impl ModuleContract for TlsTerminator {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut metrics = MetricsPayload::new();
         let stats = self.stats.snapshot();
@@ -513,7 +518,7 @@ impl ModuleContract for TlsTerminator {
         metrics.counter("bytes_written", stats.bytes_written);
         metrics.gauge(
             "uptime_seconds",
-            self.started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0) as f64,
+            self.started_at.map_or(0, |t| t.elapsed().as_secs()) as f64,
         );
 
         metrics

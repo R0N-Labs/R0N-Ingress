@@ -220,29 +220,25 @@ impl ResolvesServerCert for SniRouter {
 ///
 /// This is used for passthrough mode where we need to peek at the SNI
 /// without fully parsing the TLS handshake.
-///
-/// # Errors
-///
-/// Returns an error if the SNI cannot be extracted.
-pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
+pub fn extract_sni_from_client_hello(data: &[u8]) -> Option<String> {
     // Minimum TLS record header size
     if data.len() < 5 {
-        return Ok(None);
+        return None;
     }
 
     // Check for TLS handshake record (0x16)
     if data[0] != 0x16 {
-        return Ok(None);
+        return None;
     }
 
     // Skip record header (5 bytes) and handshake header (4 bytes)
     if data.len() < 9 {
-        return Ok(None);
+        return None;
     }
 
     // Check for ClientHello (0x01)
     if data[5] != 0x01 {
-        return Ok(None);
+        return None;
     }
 
     // Skip to extensions
@@ -251,7 +247,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
     let mut pos = 43; // Skip fixed-size fields
 
     if data.len() <= pos {
-        return Ok(None);
+        return None;
     }
 
     // Skip session ID
@@ -259,7 +255,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
     pos += 1 + session_id_len;
 
     if data.len() <= pos + 2 {
-        return Ok(None);
+        return None;
     }
 
     // Skip cipher suites
@@ -267,7 +263,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
     pos += 2 + cipher_suites_len;
 
     if data.len() <= pos + 1 {
-        return Ok(None);
+        return None;
     }
 
     // Skip compression methods
@@ -275,7 +271,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
     pos += 1 + compression_len;
 
     if data.len() <= pos + 2 {
-        return Ok(None);
+        return None;
     }
 
     // Extensions length
@@ -284,7 +280,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
 
     let extensions_end = pos + extensions_len;
     if data.len() < extensions_end {
-        return Ok(None);
+        return None;
     }
 
     // Parse extensions looking for SNI (type 0)
@@ -294,7 +290,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
         pos += 4;
 
         if pos + ext_len > extensions_end {
-            return Ok(None);
+            return None;
         }
 
         if ext_type == 0 {
@@ -309,7 +305,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
                         if pos + 5 + name_len <= extensions_end {
                             let hostname =
                                 String::from_utf8_lossy(&data[pos + 5..pos + 5 + name_len]);
-                            return Ok(Some(hostname.to_string()));
+                            return Some(hostname.to_string());
                         }
                     }
                 }
@@ -319,7 +315,7 @@ pub fn extract_sni_from_client_hello(data: &[u8]) -> TlsResult<Option<String>> {
         pos += ext_len;
     }
 
-    Ok(None)
+    None
 }
 
 #[cfg(test)]
@@ -345,12 +341,12 @@ mod tests {
     #[test]
     fn test_extract_sni_empty() {
         let result = extract_sni_from_client_hello(&[]);
-        assert!(result.unwrap().is_none());
+        assert!(result.is_none());
     }
 
     #[test]
     fn test_extract_sni_not_tls() {
         let result = extract_sni_from_client_hello(&[0x00, 0x00, 0x00, 0x00, 0x00]);
-        assert!(result.unwrap().is_none());
+        assert!(result.is_none());
     }
 }

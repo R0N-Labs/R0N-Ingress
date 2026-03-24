@@ -20,11 +20,13 @@ pub enum SamplingDecision {
 
 impl SamplingDecision {
     /// Check if this decision means we should record
+    #[must_use]
     pub fn is_recording(&self) -> bool {
         matches!(self, Self::RecordOnly | Self::RecordAndSample)
     }
 
     /// Check if this decision means we should sample/export
+    #[must_use]
     pub fn is_sampled(&self) -> bool {
         matches!(self, Self::RecordAndSample)
     }
@@ -42,6 +44,7 @@ pub struct SamplingResult {
 
 impl SamplingResult {
     /// Create a drop result
+    #[must_use]
     pub fn drop() -> Self {
         Self {
             decision: SamplingDecision::Drop,
@@ -50,6 +53,7 @@ impl SamplingResult {
     }
 
     /// Create a record-only result
+    #[must_use]
     pub fn record_only() -> Self {
         Self {
             decision: SamplingDecision::RecordOnly,
@@ -58,6 +62,7 @@ impl SamplingResult {
     }
 
     /// Create a record-and-sample result
+    #[must_use]
     pub fn record_and_sample() -> Self {
         Self {
             decision: SamplingDecision::RecordAndSample,
@@ -66,6 +71,7 @@ impl SamplingResult {
     }
 
     /// Add an attribute
+    #[must_use]
     pub fn with_attribute(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.attributes.push((key.into(), value.into()));
         self
@@ -106,6 +112,7 @@ pub struct AlwaysOnSampler;
 
 impl AlwaysOnSampler {
     /// Create a new always-on sampler
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -116,7 +123,7 @@ impl Sampler for AlwaysOnSampler {
         SamplingResult::record_and_sample()
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "AlwaysOnSampler"
     }
 }
@@ -127,6 +134,7 @@ pub struct AlwaysOffSampler;
 
 impl AlwaysOffSampler {
     /// Create a new always-off sampler
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -137,7 +145,7 @@ impl Sampler for AlwaysOffSampler {
         SamplingResult::drop()
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "AlwaysOffSampler"
     }
 }
@@ -148,7 +156,7 @@ pub struct TraceIdRatioSampler {
     /// Sampling ratio (0.0 to 1.0)
     ratio: f64,
 
-    /// Upper bound for trace ID (ratio * u64::MAX)
+    /// Upper bound for trace ID (ratio * `u64::MAX`)
     upper_bound: u64,
 
     /// Description string
@@ -157,6 +165,12 @@ pub struct TraceIdRatioSampler {
 
 impl TraceIdRatioSampler {
     /// Create a new ratio sampler
+    #[must_use]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss
+    )]
     pub fn new(ratio: f64) -> Self {
         let ratio = ratio.clamp(0.0, 1.0);
         let upper_bound = (ratio * u64::MAX as f64) as u64;
@@ -164,11 +178,12 @@ impl TraceIdRatioSampler {
         Self {
             ratio,
             upper_bound,
-            description: format!("TraceIdRatioSampler{{ratio={}}}", ratio),
+            description: format!("TraceIdRatioSampler{{ratio={ratio}}}"),
         }
     }
 
     /// Get the ratio
+    #[must_use]
     pub fn ratio(&self) -> f64 {
         self.ratio
     }
@@ -209,6 +224,7 @@ pub struct ParentBasedSampler {
 
 impl ParentBasedSampler {
     /// Create a new parent-based sampler with default behavior
+    #[must_use]
     pub fn new(root: Box<dyn Sampler>) -> Self {
         Self {
             root,
@@ -220,12 +236,14 @@ impl ParentBasedSampler {
     }
 
     /// Set the sampler for remote parent sampled case
+    #[must_use]
     pub fn with_remote_parent_sampled(mut self, sampler: Box<dyn Sampler>) -> Self {
         self.remote_parent_sampled = sampler;
         self
     }
 
     /// Set the sampler for remote parent not sampled case
+    #[must_use]
     pub fn with_remote_parent_not_sampled(mut self, sampler: Box<dyn Sampler>) -> Self {
         self.remote_parent_not_sampled = sampler;
         self
@@ -252,7 +270,7 @@ impl Sampler for ParentBasedSampler {
         }
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "ParentBasedSampler"
     }
 }
@@ -261,7 +279,7 @@ impl std::fmt::Debug for ParentBasedSampler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParentBasedSampler")
             .field("root", &self.root.description())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -282,16 +300,18 @@ pub struct RateLimitingSampler {
 
 impl RateLimitingSampler {
     /// Create a new rate-limiting sampler
+    #[must_use]
     pub fn new(max_per_second: u32) -> Self {
         Self {
             max_per_second,
-            tokens: AtomicU64::new(max_per_second as u64),
+            tokens: AtomicU64::new(u64::from(max_per_second)),
             last_refill: std::sync::RwLock::new(Instant::now()),
-            description: format!("RateLimitingSampler{{rate={}/s}}", max_per_second),
+            description: format!("RateLimitingSampler{{rate={max_per_second}/s}}"),
         }
     }
 
     /// Refill tokens based on elapsed time
+    #[allow(clippy::cast_possible_truncation)]
     fn refill(&self) {
         let mut last = self.last_refill.write().unwrap();
         let elapsed = last.elapsed();
@@ -300,7 +320,7 @@ impl RateLimitingSampler {
             // Refill tokens
             let new_tokens =
                 (elapsed.as_secs() as u32 * self.max_per_second).min(self.max_per_second);
-            self.tokens.store(new_tokens as u64, Ordering::Relaxed);
+            self.tokens.store(u64::from(new_tokens), Ordering::Relaxed);
             *last = Instant::now();
         }
     }
@@ -336,11 +356,12 @@ impl std::fmt::Debug for RateLimitingSampler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RateLimitingSampler")
             .field("max_per_second", &self.max_per_second)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
 /// Create a sampler from configuration
+#[must_use]
 pub fn create_sampler(
     strategy: super::config::SamplingStrategy,
     ratio: f64,
@@ -408,12 +429,13 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_ratio_sampler() {
         let sampler = TraceIdRatioSampler::new(0.5);
         assert_eq!(sampler.ratio(), 0.5);
 
         // With 50% sampling, some should be sampled, some not
-        let mut sampled = 0;
+        let mut sample_count = 0;
         let mut dropped = 0;
 
         for _ in 0..1000 {
@@ -427,7 +449,7 @@ mod tests {
 
             let result = sampler.should_sample(&params);
             if result.decision.is_sampled() {
-                sampled += 1;
+                sample_count += 1;
             } else {
                 dropped += 1;
             }
@@ -435,8 +457,11 @@ mod tests {
 
         // With 1000 samples at 50%, we should have a reasonable distribution
         // Allow 30-70% range to account for randomness
-        assert!(sampled > 300, "expected >300 sampled, got {}", sampled);
-        assert!(dropped > 300, "expected >300 dropped, got {}", dropped);
+        assert!(
+            sample_count > 300,
+            "expected >300 sampled, got {sample_count}"
+        );
+        assert!(dropped > 300, "expected >300 dropped, got {dropped}");
     }
 
     #[test]
@@ -509,7 +534,7 @@ mod tests {
         let sampler = RateLimitingSampler::new(10);
 
         // First 10 should be sampled
-        let mut sampled = 0;
+        let mut sample_count = 0;
         for _ in 0..15 {
             let params = SamplingParameters {
                 parent_context: None,
@@ -520,11 +545,11 @@ mod tests {
             };
 
             if sampler.should_sample(&params).decision.is_sampled() {
-                sampled += 1;
+                sample_count += 1;
             }
         }
 
-        assert_eq!(sampled, 10);
+        assert_eq!(sample_count, 10);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Rate limiting handler implementing ModuleContract.
+//! Rate limiting handler implementing `ModuleContract`.
 
 use super::config::RateLimitConfig;
 use super::distributed::{create_backend, DistributedState, LocalState};
@@ -91,7 +91,7 @@ impl std::fmt::Debug for RateLimitHandler {
             .field("status", &self.status)
             .field("stats", &self.stats)
             .field("started_at", &self.started_at)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -187,8 +187,7 @@ impl RateLimitHandler {
     pub fn is_distributed_healthy(&self) -> bool {
         self.distributed_state
             .as_ref()
-            .map(|s| s.is_healthy())
-            .unwrap_or(true)
+            .map_or(true, |s| s.is_healthy())
     }
 }
 
@@ -327,6 +326,7 @@ impl ModuleContract for RateLimitHandler {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut metrics = MetricsPayload::new();
 
@@ -392,7 +392,7 @@ mod tests {
     use crate::module::ModuleConfig;
 
     fn create_test_config() -> String {
-        r#"
+        r"
             enabled = true
 
             [default_limit]
@@ -404,7 +404,7 @@ mod tests {
             enabled = true
             max_requests = 50
             refill_rate = 5.0
-        "#
+        "
         .to_string()
     }
 
@@ -448,12 +448,12 @@ mod tests {
         let mut handler = RateLimitHandler::new();
 
         let config = ModuleConfig::from_raw(
-            r#"
+            r"
             enabled = true
             [default_limit]
             max_tokens = 5
             refill_rate = 0.001
-            "#
+            "
             .to_string(),
         );
 
@@ -479,9 +479,9 @@ mod tests {
         let mut handler = RateLimitHandler::new();
 
         let config = ModuleConfig::from_raw(
-            r#"
+            r"
             enabled = false
-            "#
+            "
             .to_string(),
         );
 
@@ -499,13 +499,13 @@ mod tests {
         let mut handler = RateLimitHandler::new();
 
         let config = ModuleConfig::from_raw(
-            r#"
+            r"
             enabled = true
             [per_ip]
             enabled = true
             max_requests = 3
             refill_rate = 0.001
-            "#
+            "
             .to_string(),
         );
 
@@ -572,12 +572,12 @@ mod tests {
 
         // Reload with new config
         let new_config = ModuleConfig::from_raw(
-            r#"
+            r"
             enabled = true
             [default_limit]
             max_tokens = 200
             refill_rate = 20.0
-            "#
+            "
             .to_string(),
         );
 
@@ -636,12 +636,12 @@ mod tests {
         let mut handler = RateLimitHandler::new();
 
         let config = ModuleConfig::from_raw(
-            r#"
+            r"
             enabled = true
             [default_limit]
             max_tokens = 5
             refill_rate = 0.001
-            "#
+            "
             .to_string(),
         );
 

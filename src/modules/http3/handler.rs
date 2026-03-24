@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 /// HTTP/3 configuration
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Http3Config {
     /// Enable HTTP/3
@@ -100,6 +101,7 @@ impl Default for Http3Config {
 
 impl Http3Config {
     /// Create settings from config
+    #[must_use]
     pub fn to_settings(&self) -> Settings {
         Settings::new()
             .with_max_field_section_size(self.max_field_section_size)
@@ -131,11 +133,13 @@ pub enum ConnectionState {
 
 impl ConnectionState {
     /// Check if can send requests
+    #[must_use]
     pub fn can_request(&self) -> bool {
         matches!(self, Self::Ready)
     }
 
     /// Check if closed
+    #[must_use]
     pub fn is_closed(&self) -> bool {
         matches!(self, Self::Closed)
     }
@@ -153,7 +157,7 @@ impl std::fmt::Display for ConnectionState {
     }
 }
 
-/// HTTP/3 handler implementing ModuleContract
+/// HTTP/3 handler implementing `ModuleContract`
 pub struct Http3Handler {
     /// Configuration
     config: Http3Config,
@@ -203,6 +207,7 @@ pub struct Http3Handler {
 
 impl Http3Handler {
     /// Create new handler
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: Http3Config::default(),
@@ -355,6 +360,7 @@ impl ModuleContract for Http3Handler {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 

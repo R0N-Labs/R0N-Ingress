@@ -13,36 +13,43 @@ impl StreamId {
     pub const MAX: u64 = (1 << 62) - 1;
 
     /// Create new stream ID
+    #[must_use]
     pub fn new(id: u64) -> Self {
         Self(id & Self::MAX)
     }
 
     /// Get raw ID value
+    #[must_use]
     pub fn id(&self) -> u64 {
         self.0
     }
 
     /// Check if client-initiated (even)
+    #[must_use]
     pub fn is_client_initiated(&self) -> bool {
         self.0 & 0x01 == 0
     }
 
     /// Check if server-initiated (odd)
+    #[must_use]
     pub fn is_server_initiated(&self) -> bool {
         self.0 & 0x01 == 1
     }
 
     /// Check if bidirectional
+    #[must_use]
     pub fn is_bidirectional(&self) -> bool {
         self.0 & 0x02 == 0
     }
 
     /// Check if unidirectional
+    #[must_use]
     pub fn is_unidirectional(&self) -> bool {
         self.0 & 0x02 == 2
     }
 
     /// Get stream type
+    #[must_use]
     pub fn stream_type(&self) -> StreamType {
         if self.is_bidirectional() {
             StreamType::Bidirectional
@@ -52,6 +59,7 @@ impl StreamId {
     }
 
     /// Get stream direction (for unidirectional)
+    #[must_use]
     pub fn direction(&self) -> StreamDirection {
         match (self.is_client_initiated(), self.is_unidirectional()) {
             (true, true) => StreamDirection::ClientToServer,
@@ -61,31 +69,37 @@ impl StreamId {
     }
 
     /// Get next stream ID of the same type
+    #[must_use]
     pub fn next(&self) -> Self {
         Self::new(self.0 + 4)
     }
 
     /// Check if valid
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         self.0 <= Self::MAX
     }
 
     /// Create client-initiated bidirectional stream ID
+    #[must_use]
     pub fn client_bidi(n: u64) -> Self {
         Self::new(n * 4)
     }
 
     /// Create server-initiated bidirectional stream ID
+    #[must_use]
     pub fn server_bidi(n: u64) -> Self {
         Self::new(n * 4 + 1)
     }
 
     /// Create client-initiated unidirectional stream ID
+    #[must_use]
     pub fn client_uni(n: u64) -> Self {
         Self::new(n * 4 + 2)
     }
 
     /// Create server-initiated unidirectional stream ID
+    #[must_use]
     pub fn server_uni(n: u64) -> Self {
         Self::new(n * 4 + 3)
     }
@@ -171,6 +185,7 @@ pub enum StreamState {
 
 impl StreamState {
     /// Check if can send
+    #[must_use]
     pub fn can_send(&self) -> bool {
         matches!(
             self,
@@ -179,6 +194,7 @@ impl StreamState {
     }
 
     /// Check if can receive
+    #[must_use]
     pub fn can_receive(&self) -> bool {
         matches!(
             self,
@@ -187,11 +203,13 @@ impl StreamState {
     }
 
     /// Check if closed
+    #[must_use]
     pub fn is_closed(&self) -> bool {
         matches!(self, Self::Closed | Self::Reset)
     }
 
     /// Check if reset
+    #[must_use]
     pub fn is_reset(&self) -> bool {
         matches!(self, Self::Reset)
     }
@@ -232,6 +250,7 @@ pub struct StreamFlowControl {
 
 impl StreamFlowControl {
     /// Create with initial values
+    #[must_use]
     pub fn new(max_data: u64, peer_max_data: u64) -> Self {
         Self {
             max_data,
@@ -242,16 +261,22 @@ impl StreamFlowControl {
     }
 
     /// Available receive window
+    #[must_use]
     pub fn receive_window(&self) -> u64 {
         self.max_data.saturating_sub(self.data_consumed)
     }
 
     /// Available send window
+    #[must_use]
     pub fn send_window(&self) -> u64 {
         self.peer_max_data.saturating_sub(self.data_sent)
     }
 
     /// Record data consumed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the flow control limit would be exceeded.
     pub fn consume(&mut self, amount: u64) -> QuicResult<()> {
         let new_consumed = self.data_consumed.saturating_add(amount);
         if new_consumed > self.max_data {
@@ -265,6 +290,10 @@ impl StreamFlowControl {
     }
 
     /// Record data sent
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the peer flow control limit would be exceeded.
     pub fn send(&mut self, amount: u64) -> QuicResult<()> {
         let new_sent = self.data_sent.saturating_add(amount);
         if new_sent > self.peer_max_data {
@@ -277,7 +306,7 @@ impl StreamFlowControl {
         Ok(())
     }
 
-    /// Update max data (from MAX_STREAM_DATA frame)
+    /// Update max data (from `MAX_STREAM_DATA` frame)
     pub fn update_max_data(&mut self, max_data: u64) {
         if max_data > self.max_data {
             self.max_data = max_data;
@@ -326,6 +355,7 @@ struct StreamChunk {
 
 impl StreamBuffer {
     /// Create new buffer
+    #[must_use]
     pub fn new(max_size: usize) -> Self {
         Self {
             chunks: VecDeque::new(),
@@ -337,6 +367,11 @@ impl StreamBuffer {
     }
 
     /// Insert data at offset
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer overflows or a FIN offset mismatch occurs.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn insert(&mut self, offset: u64, data: &[u8], is_fin: bool) -> QuicResult<()> {
         if data.is_empty() && !is_fin {
             return Ok(());
@@ -396,6 +431,11 @@ impl StreamBuffer {
     }
 
     /// Read available contiguous data
+    ///
+    /// # Panics
+    ///
+    /// Panics if the front chunk is unexpectedly absent from a non-empty deque.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn read(&mut self, buf: &mut [u8]) -> usize {
         let mut total_read = 0;
 
@@ -429,6 +469,7 @@ impl StreamBuffer {
     }
 
     /// Check if FIN has been received and all data read
+    #[must_use]
     pub fn is_finished(&self) -> bool {
         if let Some(fin_offset) = self.fin_offset {
             self.read_offset >= fin_offset
@@ -438,22 +479,26 @@ impl StreamBuffer {
     }
 
     /// Get buffered byte count
+    #[must_use]
     pub fn len(&self) -> usize {
         self.buffered_bytes
     }
 
     /// Check if buffer is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.buffered_bytes == 0
     }
 
     /// Get read offset
+    #[must_use]
     pub fn read_offset(&self) -> u64 {
         self.read_offset
     }
 }
 
 /// QUIC Stream
+#[allow(clippy::struct_field_names)]
 pub struct Stream {
     /// Stream ID
     id: StreamId,
@@ -491,6 +536,7 @@ pub struct Stream {
 
 impl Stream {
     /// Create new stream
+    #[must_use]
     pub fn new(id: StreamId, stream_type: StreamType) -> Self {
         Self {
             id,
@@ -508,16 +554,19 @@ impl Stream {
     }
 
     /// Get stream ID
+    #[must_use]
     pub fn id(&self) -> StreamId {
         self.id
     }
 
     /// Get stream type
+    #[must_use]
     pub fn stream_type(&self) -> StreamType {
         self.stream_type
     }
 
     /// Get stream state
+    #[must_use]
     pub fn state(&self) -> StreamState {
         self.state
     }
@@ -528,6 +577,7 @@ impl Stream {
     }
 
     /// Get flow control
+    #[must_use]
     pub fn flow_control(&self) -> &StreamFlowControl {
         &self.flow_control
     }
@@ -538,6 +588,7 @@ impl Stream {
     }
 
     /// Get priority
+    #[must_use]
     pub fn priority(&self) -> u8 {
         self.priority
     }
@@ -548,6 +599,11 @@ impl Stream {
     }
 
     /// Queue data to send
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream is closed or the send window is exceeded.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn send(&mut self, data: &[u8]) -> QuicResult<()> {
         if !self.state.can_send() {
             return Err(QuicError::StreamClosed(self.id.id()));
@@ -584,11 +640,16 @@ impl Stream {
     }
 
     /// Check if has pending send data
+    #[must_use]
     pub fn has_pending_send(&self) -> bool {
         !self.send_buffer.is_empty() || (self.fin_sent && !self.fin_received)
     }
 
     /// Receive data
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream is closed or data insertion fails.
     pub fn receive(&mut self, offset: u64, data: &[u8], is_fin: bool) -> QuicResult<()> {
         if !self.state.can_receive() {
             return Err(QuicError::StreamClosed(self.id.id()));
@@ -610,11 +671,16 @@ impl Stream {
     }
 
     /// Check if receive is finished (FIN received and all data read)
+    #[must_use]
     pub fn is_receive_finished(&self) -> bool {
         self.recv_buffer.is_finished()
     }
 
     /// Send FIN
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream is closed.
     pub fn finish(&mut self) -> QuicResult<()> {
         if !self.state.can_send() {
             return Err(QuicError::StreamClosed(self.id.id()));
@@ -647,16 +713,19 @@ impl Stream {
     }
 
     /// Get reset error code
+    #[must_use]
     pub fn reset_code(&self) -> Option<u64> {
         self.reset_code
     }
 
     /// Check if FIN sent
+    #[must_use]
     pub fn fin_sent(&self) -> bool {
         self.fin_sent
     }
 
     /// Check if FIN received
+    #[must_use]
     pub fn fin_received(&self) -> bool {
         self.fin_received
     }
@@ -683,7 +752,7 @@ impl Read for Stream {
 impl Write for Stream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         Stream::send(self, buf)
-            .map(|_| buf.len())
+            .map(|()| buf.len())
             .map_err(|e| io::Error::other(e.to_string()))
     }
 
@@ -702,7 +771,7 @@ impl std::fmt::Debug for Stream {
             .field("recv_buffer_len", &self.recv_buffer.len())
             .field("fin_sent", &self.fin_sent)
             .field("fin_received", &self.fin_received)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

@@ -3,7 +3,7 @@
 //! This module handles MQTT client sessions, including:
 //! - Session state persistence
 //! - Subscription management
-//! - QoS message tracking
+//! - `QoS` message tracking
 //! - Will message handling
 
 use crate::modules::mqtt_handler::config::ProtocolVersion;
@@ -36,11 +36,11 @@ pub struct Session {
     pub created_at: Instant,
     /// When the client last sent a message.
     pub last_activity: Instant,
-    /// Subscriptions with their QoS levels.
+    /// Subscriptions with their `QoS` levels.
     pub subscriptions: HashMap<String, SubscriptionState>,
-    /// Pending outbound messages (QoS 1/2).
+    /// Pending outbound messages (`QoS` 1/2).
     pub pending_outbound: VecDeque<PendingMessage>,
-    /// Pending inbound messages (QoS 2).
+    /// Pending inbound messages (`QoS` 2).
     pub pending_inbound: HashMap<u16, InboundMessage>,
     /// Next packet identifier.
     packet_id_counter: AtomicU16,
@@ -56,6 +56,7 @@ pub struct Session {
 
 impl Session {
     /// Create a new session.
+    #[must_use]
     pub fn new(client_id: String, protocol_version: ProtocolVersion) -> Self {
         Self {
             client_id,
@@ -130,7 +131,7 @@ impl Session {
         self.pending_outbound.pop_front()
     }
 
-    /// Record an inbound QoS 2 message.
+    /// Record an inbound `QoS` 2 message.
     pub fn record_inbound(&mut self, packet_id: u16, publish: Publish) {
         self.pending_inbound.insert(
             packet_id,
@@ -142,7 +143,7 @@ impl Session {
         );
     }
 
-    /// Complete an inbound QoS 2 message (PUBCOMP received).
+    /// Complete an inbound `QoS` 2 message (PUBCOMP received).
     pub fn complete_inbound(&mut self, packet_id: u16) -> Option<InboundMessage> {
         self.pending_inbound.remove(&packet_id)
     }
@@ -163,7 +164,7 @@ impl Session {
 /// Subscription state.
 #[derive(Debug, Clone)]
 pub struct SubscriptionState {
-    /// Maximum QoS for this subscription.
+    /// Maximum `QoS` for this subscription.
     pub qos: QoS,
     /// Subscription options.
     pub options: SubscriptionOptions,
@@ -201,7 +202,7 @@ pub struct PendingMessage {
     pub packet_id: u16,
     /// The publish message.
     pub publish: Publish,
-    /// QoS 2 state.
+    /// `QoS` 2 state.
     pub qos2_state: Option<QoS2State>,
     /// When the message was queued.
     pub timestamp: Instant,
@@ -209,18 +210,18 @@ pub struct PendingMessage {
     pub attempts: u32,
 }
 
-/// An inbound QoS 2 message.
+/// An inbound `QoS` 2 message.
 #[derive(Debug, Clone)]
 pub struct InboundMessage {
     /// The publish message.
     pub publish: Publish,
-    /// Current state in QoS 2 flow.
+    /// Current state in `QoS` 2 flow.
     pub state: QoS2State,
     /// When the message was received.
     pub timestamp: Instant,
 }
 
-/// QoS 2 message state.
+/// `QoS` 2 message state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QoS2State {
     /// PUBLISH received, waiting for PUBREC.
@@ -238,7 +239,7 @@ pub struct WillMessage {
     pub topic: String,
     /// Payload of the will message.
     pub payload: Bytes,
-    /// QoS level.
+    /// `QoS` level.
     pub qos: QoS,
     /// Retain flag.
     pub retain: bool,
@@ -262,6 +263,7 @@ pub struct SessionManager {
 
 impl SessionManager {
     /// Create a new session manager.
+    #[must_use]
     pub fn new(max_sessions: usize, default_expiry: Duration) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),

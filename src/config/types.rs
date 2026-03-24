@@ -50,7 +50,7 @@ impl Default for GatewaySection {
     fn default() -> Self {
         Self {
             name: "r0n-gateway".to_string(),
-            bind_address: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            bind_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             control_port: 9000,
             socket_path: PathBuf::from("/var/run/r0n-gateway/control.sock"),
             work_dir: PathBuf::from("/var/lib/r0n-gateway"),
@@ -204,6 +204,7 @@ fn default_true() -> bool {
 
 impl ModuleEntry {
     /// Create a new module entry.
+    #[must_use]
     pub fn new(name: &str, module_type: &str) -> Self {
         Self {
             name: name.to_string(),

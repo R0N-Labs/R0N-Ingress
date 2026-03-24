@@ -34,8 +34,8 @@ impl Default for UdpRouterConfig {
             routes: Vec::new(),
             session: SessionSettings::default(),
             max_datagram_size: 65535,
-            recv_buffer_size: 1048576, // 1MB
-            send_buffer_size: 1048576, // 1MB
+            recv_buffer_size: 1_048_576, // 1MB
+            send_buffer_size: 1_048_576, // 1MB
         }
     }
 }
@@ -54,17 +54,17 @@ pub struct ListenerConfig {
     #[serde(default)]
     pub name: Option<String>,
 
-    /// Enable SO_REUSEADDR.
+    /// Enable `SO_REUSEADDR`.
     #[serde(default = "default_true")]
     pub reuse_addr: bool,
 
-    /// Enable SO_REUSEPORT (Linux only).
+    /// Enable `SO_REUSEPORT` (Linux only).
     #[serde(default)]
     pub reuse_port: bool,
 }
 
 fn default_bind_address() -> IpAddr {
-    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+    IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 }
 
 fn default_true() -> bool {
@@ -325,14 +325,14 @@ mod tests {
     #[test]
     fn test_listener_config() {
         let listener = ListenerConfig::new(5353)
-            .with_address(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+            .with_address(IpAddr::V4(Ipv4Addr::LOCALHOST))
             .with_name("dns");
 
         assert_eq!(listener.port, 5353);
         assert_eq!(listener.name, Some("dns".to_string()));
         assert_eq!(
             listener.socket_addr(),
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 5353)
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5353)
         );
     }
 

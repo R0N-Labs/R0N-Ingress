@@ -4,6 +4,7 @@ use super::config::{RuleAction, RuleSeverity, WafRuleConfig};
 use super::error::{WafError, WafResult};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 /// Rule category for classification
@@ -40,20 +41,17 @@ pub enum RuleCategory {
 
 impl RuleCategory {
     /// Get OWASP CRS category prefix
+    #[must_use]
     pub fn crs_prefix(&self) -> &'static str {
         match self {
             Self::SqlInjection => "942",
             Self::Xss => "941",
-            Self::PathTraversal => "930",
-            Self::Lfi => "930",
+            Self::PathTraversal | Self::Lfi => "930",
             Self::Rfi => "931",
             Self::Rce => "932",
-            Self::ProtocolAttack => "921",
+            Self::ProtocolAttack | Self::ResponseSplitting | Self::RequestSmuggling => "921",
             Self::SessionFixation => "943",
-            Self::ResponseSplitting => "921",
-            Self::RequestSmuggling => "921",
-            Self::Scanner => "913",
-            Self::Bot => "913",
+            Self::Scanner | Self::Bot => "913",
             Self::Custom => "900",
         }
     }
@@ -101,6 +99,10 @@ pub enum RuleTarget {
 
 impl RuleTarget {
     /// Parse target from string
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the target string is unknown.
     pub fn parse(s: &str) -> WafResult<Self> {
         let lower = s.to_lowercase();
 
@@ -133,7 +135,7 @@ impl RuleTarget {
             "user_agent" | "useragent" => Ok(Self::UserAgent),
             "content_type" | "contenttype" => Ok(Self::ContentType),
             "referer" | "referrer" => Ok(Self::Referer),
-            _ => Err(WafError::InvalidRule(format!("Unknown target: {}", s))),
+            _ => Err(WafError::InvalidRule(format!("Unknown target: {s}"))),
         }
     }
 }
@@ -163,7 +165,7 @@ pub enum Operator {
     LengthExceeds,
     /// Phrase match (multiple words)
     PhraseMatch,
-    /// Detect SQLi
+    /// Detect `SQLi`
     DetectSqli,
     /// Detect XSS
     DetectXss,
@@ -205,6 +207,10 @@ pub enum Transform {
 
 impl Transform {
     /// Parse from string
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the transform name is unknown.
     pub fn parse(s: &str) -> WafResult<Self> {
         match s.to_lowercase().as_str() {
             "lowercase" | "lower" => Ok(Self::Lowercase),
@@ -221,27 +227,29 @@ impl Transform {
             "hexdecode" | "hex_decode" => Ok(Self::HexDecode),
             "utf8tounicode" | "utf8_to_unicode" => Ok(Self::Utf8ToUnicode),
             "none" => Ok(Self::None),
-            _ => Err(WafError::InvalidRule(format!("Unknown transform: {}", s))),
+            _ => Err(WafError::InvalidRule(format!("Unknown transform: {s}"))),
         }
     }
 
-    /// Apply transformation to input
-    pub fn apply(&self, input: &str) -> String {
+    /// Apply transformation to input (zero-copy for no-op transforms)
+    #[must_use]
+    pub fn apply<'a>(&self, input: &'a str) -> Cow<'a, str> {
         match self {
-            Self::Lowercase => input.to_lowercase(),
-            Self::Uppercase => input.to_uppercase(),
-            Self::UrlDecode => Self::url_decode(input),
-            Self::UrlDecodeUni => Self::url_decode_uni(input),
-            Self::HtmlEntityDecode => Self::html_entity_decode(input),
-            Self::RemoveWhitespace => input.chars().filter(|c| !c.is_whitespace()).collect(),
-            Self::CompressWhitespace => Self::compress_whitespace(input),
-            Self::RemoveComments => Self::remove_comments(input),
-            Self::RemoveNulls => input.replace('\0', ""),
-            Self::NormalizePath => Self::normalize_path(input),
-            Self::Base64Decode => Self::base64_decode(input),
-            Self::HexDecode => Self::hex_decode(input),
-            Self::Utf8ToUnicode => input.to_string(),
-            Self::None => input.to_string(),
+            Self::None | Self::Utf8ToUnicode => Cow::Borrowed(input),
+            Self::Lowercase => Cow::Owned(input.to_lowercase()),
+            Self::Uppercase => Cow::Owned(input.to_uppercase()),
+            Self::UrlDecode => Cow::Owned(Self::url_decode(input)),
+            Self::UrlDecodeUni => Cow::Owned(Self::url_decode_uni(input)),
+            Self::HtmlEntityDecode => Cow::Owned(Self::html_entity_decode(input)),
+            Self::RemoveWhitespace => {
+                Cow::Owned(input.chars().filter(|c| !c.is_whitespace()).collect())
+            },
+            Self::CompressWhitespace => Cow::Owned(Self::compress_whitespace(input)),
+            Self::RemoveComments => Cow::Owned(Self::remove_comments(input)),
+            Self::RemoveNulls => Cow::Owned(input.replace('\0', "")),
+            Self::NormalizePath => Cow::Owned(Self::normalize_path(input)),
+            Self::Base64Decode => Cow::Owned(Self::base64_decode(input)),
+            Self::HexDecode => Cow::Owned(Self::hex_decode(input)),
         }
     }
 
@@ -469,6 +477,10 @@ pub struct RuleDefinition {
 
 impl RuleDefinition {
     /// Create from config
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if targets or transforms are invalid.
     pub fn from_config(config: &WafRuleConfig) -> WafResult<Self> {
         let targets = if config.targets.is_empty() {
             vec![RuleTarget::QueryParams, RuleTarget::Body]
@@ -522,6 +534,10 @@ pub struct CompiledRule {
 
 impl CompiledRule {
     /// Compile a rule definition
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the regex pattern is invalid.
     pub fn compile(definition: RuleDefinition) -> WafResult<Self> {
         let regex = match definition.operator {
             Operator::Regex | Operator::DetectSqli | Operator::DetectXss => {
@@ -549,24 +565,32 @@ impl CompiledRule {
     }
 
     /// Check if rule matches input
+    #[must_use]
     pub fn matches(&self, input: &str) -> bool {
-        // Apply transformations
-        let mut value = input.to_string();
+        // Apply transformations — zero-copy chain: only allocate if a transform modifies
+        let mut owned: Option<String> = None;
         for transform in &self.definition.transforms {
-            value = transform.apply(&value);
+            let current = owned.as_deref().unwrap_or(input);
+            match transform.apply(current) {
+                Cow::Borrowed(_) => {}, // no-op, keep current value
+                Cow::Owned(new) => {
+                    owned = Some(new);
+                },
+            }
         }
+        let value = owned.as_deref().unwrap_or(input);
 
         match self.definition.operator {
             Operator::Regex | Operator::DetectSqli | Operator::DetectXss => {
-                self.regex.as_ref().is_some_and(|re| re.is_match(&value))
+                self.regex.as_ref().is_some_and(|re| re.is_match(value))
             },
-            Operator::Contains => value.contains(&self.definition.pattern),
+            Operator::Contains => value.contains(&*self.definition.pattern),
             Operator::Equals => value == self.definition.pattern,
-            Operator::StartsWith => value.starts_with(&self.definition.pattern),
-            Operator::EndsWith => value.ends_with(&self.definition.pattern),
+            Operator::StartsWith => value.starts_with(&*self.definition.pattern),
+            Operator::EndsWith => value.ends_with(&*self.definition.pattern),
             Operator::PhraseMatch => {
                 let lower = value.to_lowercase();
-                self.phrases.iter().any(|p| lower.contains(p))
+                self.phrases.iter().any(|p| lower.contains(p.as_str()))
             },
             Operator::LengthExceeds => self
                 .definition
@@ -614,6 +638,7 @@ pub struct RuleSet {
 
 impl RuleSet {
     /// Create empty ruleset
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -637,6 +662,7 @@ impl RuleSet {
     }
 
     /// Get rule by ID
+    #[must_use]
     pub fn get(&self, id: &str) -> Option<&CompiledRule> {
         self.rules.get(id)
     }
@@ -647,6 +673,7 @@ impl RuleSet {
     }
 
     /// Get rules by category
+    #[must_use]
     pub fn by_category(&self, category: RuleCategory) -> Vec<&CompiledRule> {
         self.by_category
             .get(&category)
@@ -655,6 +682,7 @@ impl RuleSet {
     }
 
     /// Get rules by tag
+    #[must_use]
     pub fn by_tag(&self, tag: &str) -> Vec<&CompiledRule> {
         self.by_tag
             .get(tag)
@@ -668,16 +696,19 @@ impl RuleSet {
     }
 
     /// Rule count
+    #[must_use]
     pub fn len(&self) -> usize {
         self.rules.len()
     }
 
     /// Check if empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
     }
 
     /// Load OWASP CRS-style rules (simplified)
+    #[must_use]
     pub fn load_crs_rules() -> Self {
         let mut set = Self::new();
 
@@ -1064,7 +1095,7 @@ mod tests {
 
         for attack in &attacks {
             let matched = sqli_rules.iter().any(|r| r.matches(attack));
-            assert!(matched, "Should detect SQLi: {}", attack);
+            assert!(matched, "Should detect SQLi: {attack}");
         }
     }
 
@@ -1082,7 +1113,7 @@ mod tests {
 
         for attack in &attacks {
             let matched = xss_rules.iter().any(|r| r.matches(attack));
-            assert!(matched, "Should detect XSS: {}", attack);
+            assert!(matched, "Should detect XSS: {attack}");
         }
     }
 
@@ -1100,7 +1131,7 @@ mod tests {
 
         for attack in &attacks {
             let matched = pt_rules.iter().any(|r| r.matches(attack));
-            assert!(matched, "Should detect path traversal: {}", attack);
+            assert!(matched, "Should detect path traversal: {attack}");
         }
     }
 }

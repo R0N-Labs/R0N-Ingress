@@ -20,6 +20,10 @@ pub struct Redactor {
 
 impl Redactor {
     /// Create a new redactor from configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if regex patterns are invalid.
     pub fn new(config: RedactionConfig) -> LogResult<Self> {
         let fields: HashSet<String> = if config.case_insensitive {
             config.fields.iter().map(|f| f.to_lowercase()).collect()
@@ -32,7 +36,7 @@ impl Redactor {
             .iter()
             .filter_map(|p| {
                 if config.case_insensitive {
-                    Regex::new(&format!("(?i){}", p)).ok()
+                    Regex::new(&format!("(?i){p}")).ok()
                 } else {
                     Regex::new(p).ok()
                 }
@@ -47,6 +51,7 @@ impl Redactor {
     }
 
     /// Create a disabled redactor
+    #[must_use]
     pub fn disabled() -> Self {
         Self {
             config: RedactionConfig::none(),
@@ -56,11 +61,13 @@ impl Redactor {
     }
 
     /// Check if redaction is enabled
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.config.enabled
     }
 
     /// Check if a field name should be redacted
+    #[must_use]
     pub fn should_redact_field(&self, field: &str) -> bool {
         if !self.config.enabled {
             return false;
@@ -76,6 +83,7 @@ impl Redactor {
     }
 
     /// Redact a value if it matches sensitive patterns
+    #[must_use]
     pub fn redact_value(&self, value: &str) -> String {
         if !self.config.enabled {
             return value.to_string();
@@ -93,6 +101,7 @@ impl Redactor {
     }
 
     /// Redact a key-value pair
+    #[must_use]
     pub fn redact_pair(&self, key: &str, value: &str) -> String {
         if !self.config.enabled {
             return value.to_string();
@@ -136,6 +145,7 @@ impl Redactor {
     }
 
     /// Get the replacement string
+    #[must_use]
     pub fn replacement(&self) -> &str {
         &self.config.replacement
     }
@@ -155,6 +165,10 @@ impl std::fmt::Debug for Redactor {
 pub type SharedRedactor = Arc<Redactor>;
 
 /// Create a shared redactor
+///
+/// # Errors
+///
+/// Returns an error if the redactor cannot be created.
 pub fn create_shared_redactor(config: RedactionConfig) -> LogResult<SharedRedactor> {
     Ok(Arc::new(Redactor::new(config)?))
 }
@@ -178,6 +192,7 @@ impl RedactExt for String {
 }
 
 /// Mask a string value (show first/last n characters)
+#[must_use]
 pub fn mask_value(value: &str, visible_start: usize, visible_end: usize) -> String {
     if value.len() <= visible_start + visible_end {
         return "*".repeat(value.len());
@@ -191,6 +206,7 @@ pub fn mask_value(value: &str, visible_start: usize, visible_end: usize) -> Stri
 }
 
 /// Mask an email address
+#[must_use]
 pub fn mask_email(email: &str) -> String {
     if let Some(at_pos) = email.find('@') {
         let local = &email[..at_pos];
@@ -207,9 +223,10 @@ pub fn mask_email(email: &str) -> String {
 }
 
 /// Mask a credit card number
+#[must_use]
 pub fn mask_credit_card(card: &str) -> String {
     // Remove spaces and dashes
-    let digits: String = card.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits: String = card.chars().filter(char::is_ascii_digit).collect();
 
     if digits.len() < 12 {
         return "*".repeat(digits.len());
@@ -217,7 +234,7 @@ pub fn mask_credit_card(card: &str) -> String {
 
     // Show last 4 digits
     let visible = &digits[digits.len() - 4..];
-    format!("****-****-****-{}", visible)
+    format!("****-****-****-{visible}")
 }
 
 #[cfg(test)]

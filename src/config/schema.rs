@@ -245,7 +245,7 @@ impl ConfigSchema {
         let mut required_vec = Vec::new();
 
         for field in &self.fields {
-            properties_map.insert(field.name.clone(), self.field_to_json_schema(field));
+            properties_map.insert(field.name.clone(), Self::field_to_json_schema(field));
             if field.required {
                 required_vec.push(serde_json::json!(field.name));
             }
@@ -266,7 +266,7 @@ impl ConfigSchema {
         schema
     }
 
-    fn field_to_json_schema(&self, field: &SchemaField) -> serde_json::Value {
+    fn field_to_json_schema(field: &SchemaField) -> serde_json::Value {
         let mut schema = serde_json::json!({
             "type": field.field_type
         });
@@ -295,7 +295,7 @@ impl ConfigSchema {
             let mut props_map = HashMap::new();
             let mut req_fields = Vec::new();
             for prop in properties {
-                props_map.insert(prop.name.clone(), self.field_to_json_schema(prop));
+                props_map.insert(prop.name.clone(), Self::field_to_json_schema(prop));
                 if prop.required {
                     req_fields.push(prop.name.clone());
                 }
@@ -307,7 +307,7 @@ impl ConfigSchema {
         }
 
         if let Some(ref items) = field.items {
-            schema["items"] = self.field_to_json_schema(items);
+            schema["items"] = Self::field_to_json_schema(items);
         }
 
         schema

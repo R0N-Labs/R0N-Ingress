@@ -82,6 +82,7 @@ impl Default for ListenerConfig {
 
 impl ListenerConfig {
     /// Get the socket address.
+    #[must_use]
     pub fn socket_addr(&self) -> Option<SocketAddr> {
         format!("{}:{}", self.address, self.port).parse().ok()
     }
@@ -132,12 +133,14 @@ pub struct BackendConfig {
 
 impl BackendConfig {
     /// Get the socket address.
+    #[must_use]
     pub fn socket_addr(&self) -> Option<SocketAddr> {
         format!("{}:{}", self.address, self.port).parse().ok()
     }
 }
 
 /// Protocol configuration.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProtocolConfig {
@@ -147,7 +150,7 @@ pub struct ProtocolConfig {
     /// Keep-alive interval in seconds (0 = disabled).
     pub keep_alive: u16,
 
-    /// Maximum QoS level supported.
+    /// Maximum `QoS` level supported.
     pub max_qos: u8,
 
     /// Whether retained messages are supported.
@@ -203,6 +206,7 @@ impl ProtocolVersion {
     }
 
     /// Create from protocol level byte.
+    #[must_use]
     pub fn from_level(level: u8) -> Option<Self> {
         match level {
             3 => Some(Self::V31),
@@ -223,7 +227,7 @@ pub struct SessionConfig {
     /// Maximum sessions per client ID.
     pub max_sessions: usize,
 
-    /// Receive maximum (max in-flight QoS 1/2 messages).
+    /// Receive maximum (max in-flight `QoS` 1/2 messages).
     pub receive_maximum: u16,
 
     /// Maximum stored messages per session.
@@ -389,7 +393,7 @@ mod tests {
         assert_eq!(config.listeners.len(), 2);
         assert_eq!(config.routes.len(), 1);
         assert_eq!(config.protocol.keep_alive, 120);
-        assert_eq!(config.limits.max_packet_size, 524288);
+        assert_eq!(config.limits.max_packet_size, 524_288);
     }
 
     #[test]

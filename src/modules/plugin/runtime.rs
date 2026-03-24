@@ -36,6 +36,7 @@ impl Default for PluginRuntime {
 
 impl PluginRuntime {
     /// Create a new plugin runtime.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: RuntimeConfig::default(),
@@ -48,6 +49,7 @@ impl PluginRuntime {
     }
 
     /// Create a runtime with configuration.
+    #[must_use]
     pub fn with_config(config: RuntimeConfig) -> Self {
         Self {
             config,
@@ -56,6 +58,10 @@ impl PluginRuntime {
     }
 
     /// Load a WASM module from bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module already exists or the WASM bytes are invalid.
     pub fn load_module(&mut self, name: impl Into<String>, wasm_bytes: &[u8]) -> PluginResult<()> {
         let name = name.into();
 
@@ -83,7 +89,7 @@ impl PluginRuntime {
 
         if version != 1 {
             return Err(PluginError::CompilationError {
-                message: format!("Unsupported WASM version: {}", version),
+                message: format!("Unsupported WASM version: {version}"),
             });
         }
 
@@ -91,8 +97,8 @@ impl PluginRuntime {
         let module = WasmModule {
             name: name.clone(),
             bytes: wasm_bytes.to_vec(),
-            exports: self.parse_exports(wasm_bytes),
-            imports: self.parse_imports(wasm_bytes),
+            exports: Self::parse_exports(wasm_bytes),
+            imports: Self::parse_imports(wasm_bytes),
             compiled: true,
             size_bytes: wasm_bytes.len(),
         };
@@ -104,6 +110,10 @@ impl PluginRuntime {
     }
 
     /// Load a WASM module from file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the WASM is invalid.
     pub fn load_module_file(
         &mut self,
         name: impl Into<String>,
@@ -114,6 +124,10 @@ impl PluginRuntime {
     }
 
     /// Unload a module.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module is not found.
     pub fn unload_module(&mut self, name: &str) -> PluginResult<()> {
         // First terminate all instances of this module
         let instance_ids: Vec<u64> = self
@@ -147,6 +161,10 @@ impl PluginRuntime {
     }
 
     /// Create a new instance of a module.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module is not found.
     pub fn create_instance(
         &mut self,
         module_name: &str,
@@ -179,12 +197,16 @@ impl PluginRuntime {
     }
 
     /// Initialize an instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instance is not found or not in Created state.
     pub fn init_instance(&mut self, instance_id: u64) -> PluginResult<()> {
         let instance =
             self.instances
                 .get_mut(&instance_id)
                 .ok_or_else(|| PluginError::NotFound {
-                    name: format!("instance:{}", instance_id),
+                    name: format!("instance:{instance_id}"),
                 })?;
 
         if instance.state != InstanceState::Created {
@@ -205,12 +227,16 @@ impl PluginRuntime {
     }
 
     /// Start an instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instance is not found or not in Initialized state.
     pub fn start_instance(&mut self, instance_id: u64) -> PluginResult<()> {
         let instance =
             self.instances
                 .get_mut(&instance_id)
                 .ok_or_else(|| PluginError::NotFound {
-                    name: format!("instance:{}", instance_id),
+                    name: format!("instance:{instance_id}"),
                 })?;
 
         if instance.state != InstanceState::Initialized {
@@ -232,12 +258,16 @@ impl PluginRuntime {
     }
 
     /// Stop an instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instance is not found or not in Running state.
     pub fn stop_instance(&mut self, instance_id: u64) -> PluginResult<()> {
         let instance =
             self.instances
                 .get_mut(&instance_id)
                 .ok_or_else(|| PluginError::NotFound {
-                    name: format!("instance:{}", instance_id),
+                    name: format!("instance:{instance_id}"),
                 })?;
 
         if instance.state != InstanceState::Running {
@@ -259,12 +289,16 @@ impl PluginRuntime {
     }
 
     /// Terminate an instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instance is not found.
     pub fn terminate_instance(&mut self, instance_id: u64) -> PluginResult<()> {
         let instance =
             self.instances
                 .remove(&instance_id)
                 .ok_or_else(|| PluginError::NotFound {
-                    name: format!("instance:{}", instance_id),
+                    name: format!("instance:{instance_id}"),
                 })?;
 
         if instance.state == InstanceState::Running {
@@ -280,6 +314,10 @@ impl PluginRuntime {
     }
 
     /// Invoke a function on an instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instance is not found, not running, or the function doesn't exist.
     pub fn invoke(
         &mut self,
         instance_id: u64,
@@ -290,7 +328,7 @@ impl PluginRuntime {
             self.instances
                 .get_mut(&instance_id)
                 .ok_or_else(|| PluginError::NotFound {
-                    name: format!("instance:{}", instance_id),
+                    name: format!("instance:{instance_id}"),
                 })?;
 
         if instance.state != InstanceState::Running {
@@ -331,6 +369,11 @@ impl PluginRuntime {
     }
 
     /// Invoke a request handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instance is not found.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     pub fn invoke_request_handler(
         &mut self,
         instance_id: u64,
@@ -341,7 +384,7 @@ impl PluginRuntime {
             self.instances
                 .get_mut(&instance_id)
                 .ok_or_else(|| PluginError::NotFound {
-                    name: format!("instance:{}", instance_id),
+                    name: format!("instance:{instance_id}"),
                 })?;
 
         if !instance.exports.contains_key("on_request") {
@@ -372,15 +415,14 @@ impl PluginRuntime {
         // Parse result
         let action = result
             .first()
-            .and_then(|v| v.as_i32())
-            .map(PluginAction::from_i32)
-            .unwrap_or(PluginAction::Continue);
+            .and_then(WasmValue::as_i32)
+            .map_or(PluginAction::Continue, PluginAction::from_i32);
 
         Ok((action, None))
     }
 
     /// Parse exports from WASM bytes (simplified).
-    fn parse_exports(&self, _wasm_bytes: &[u8]) -> HashMap<String, ExportInfo> {
+    fn parse_exports(_wasm_bytes: &[u8]) -> HashMap<String, ExportInfo> {
         // In a real implementation, this would parse the WASM export section
         let mut exports = HashMap::new();
         exports.insert(
@@ -403,7 +445,7 @@ impl PluginRuntime {
     }
 
     /// Parse imports from WASM bytes (simplified).
-    fn parse_imports(&self, _wasm_bytes: &[u8]) -> Vec<ImportInfo> {
+    fn parse_imports(_wasm_bytes: &[u8]) -> Vec<ImportInfo> {
         // In a real implementation, this would parse the WASM import section
         Vec::new()
     }
@@ -420,6 +462,7 @@ impl PluginRuntime {
 }
 
 /// Runtime configuration.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
     /// Initial memory pages (64KB each).
@@ -474,16 +517,19 @@ pub struct WasmModule {
 
 impl WasmModule {
     /// Get the WASM bytes.
+    #[must_use]
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
 
     /// Check if module has an export.
+    #[must_use]
     pub fn has_export(&self, name: &str) -> bool {
         self.exports.contains_key(name)
     }
 
     /// Get export info.
+    #[must_use]
     pub fn get_export(&self, name: &str) -> Option<&ExportInfo> {
         self.exports.get(name)
     }
@@ -547,11 +593,13 @@ pub struct PluginInstance {
 
 impl PluginInstance {
     /// Get instance uptime.
+    #[must_use]
     pub fn uptime(&self) -> Duration {
         self.created_at.elapsed()
     }
 
     /// Check if instance is running.
+    #[must_use]
     pub fn is_running(&self) -> bool {
         self.state == InstanceState::Running
     }
@@ -598,7 +646,7 @@ impl InstanceMemory {
         let ptr = self.alloc_ptr;
         if ptr + size > self.data.len() {
             return Err(PluginError::MemoryError {
-                message: format!("Out of memory: need {} bytes", size),
+                message: format!("Out of memory: need {size} bytes"),
             });
         }
         self.alloc_ptr += size;
@@ -671,6 +719,7 @@ pub enum WasmValue {
 
 impl WasmValue {
     /// Get as i32.
+    #[must_use]
     pub fn as_i32(&self) -> Option<i32> {
         match self {
             Self::I32(v) => Some(*v),
@@ -679,6 +728,7 @@ impl WasmValue {
     }
 
     /// Get as i64.
+    #[must_use]
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             Self::I64(v) => Some(*v),
@@ -687,6 +737,7 @@ impl WasmValue {
     }
 
     /// Get the value type.
+    #[must_use]
     pub fn value_type(&self) -> ValueType {
         match self {
             Self::I32(_) => ValueType::I32,

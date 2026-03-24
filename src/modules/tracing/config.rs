@@ -148,6 +148,7 @@ pub enum SamplingStrategy {
 
 impl SamplingStrategy {
     /// Parse from string
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "always_on" | "alwayson" | "always" => Some(Self::AlwaysOn),
@@ -186,6 +187,7 @@ pub enum PropagationFormat {
 
 impl PropagationFormat {
     /// Get header names for this format
+    #[must_use]
     pub fn header_names(&self) -> Vec<&'static str> {
         match self {
             Self::W3C => vec!["traceparent", "tracestate"],
@@ -279,6 +281,7 @@ pub enum ExporterType {
 
 impl ExporterType {
     /// Get default endpoint for this exporter type
+    #[must_use]
     pub fn default_endpoint(&self) -> Option<&'static str> {
         match self {
             Self::OtlpGrpc => Some("http://localhost:4317"),

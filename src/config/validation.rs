@@ -212,7 +212,7 @@ impl Validator for PortConflictValidator {
                             if let Some(existing) = used_ports.get(&port_u16) {
                                 result.add_error(ValidationError::error(
                                     format!("modules.{}.config.{}", module.name, port_field),
-                                    format!("Port {} conflicts with {}", port_u16, existing),
+                                    format!("Port {port_u16} conflicts with {existing}"),
                                 ));
                             } else {
                                 used_ports.insert(

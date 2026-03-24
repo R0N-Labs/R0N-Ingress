@@ -1,6 +1,6 @@
 //! Kubernetes integration handler.
 //!
-//! Provides a ModuleContract implementation for Kubernetes integration,
+//! Provides a `ModuleContract` implementation for Kubernetes integration,
 //! coordinating service discovery, ingress control, and secret management.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -77,6 +77,7 @@ impl Default for K8sHandler {
 
 impl K8sHandler {
     /// Create a new Kubernetes handler.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: K8sConfig::default(),
@@ -91,6 +92,7 @@ impl K8sHandler {
     }
 
     /// Create a handler with configuration.
+    #[must_use]
     pub fn with_config(config: K8sConfig) -> Self {
         let namespace = config.namespace.clone();
 
@@ -122,6 +124,7 @@ impl K8sHandler {
     }
 
     /// Create a handler for in-cluster deployment.
+    #[must_use]
     pub fn in_cluster() -> Self {
         Self::with_config(K8sConfig::in_cluster())
     }
@@ -168,7 +171,7 @@ impl K8sHandler {
 
     /// Get uptime in seconds.
     pub fn uptime_secs(&self) -> u64 {
-        self.start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0)
+        self.start_time.map_or(0, |t| t.elapsed().as_secs())
     }
 
     /// Update metrics from current state.
@@ -222,7 +225,7 @@ impl K8sHandler {
     pub fn set_leader(&self, is_leader: bool) {
         self.metrics
             .is_leader
-            .store(if is_leader { 1 } else { 0 }, Ordering::SeqCst);
+            .store(u64::from(is_leader), Ordering::SeqCst);
     }
 
     /// Record sync duration.
@@ -266,7 +269,7 @@ impl ModuleContract for K8sHandler {
 
         // Validate configuration
         self.config.validate().map_err(|e| {
-            ModuleError::ConfigError(format!("Invalid Kubernetes configuration: {}", e))
+            ModuleError::ConfigError(format!("Invalid Kubernetes configuration: {e}"))
         })?;
 
         self.initialized = true;
@@ -311,6 +314,7 @@ impl ModuleContract for K8sHandler {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         // Update metrics from current state
         self.update_metrics();

@@ -91,12 +91,14 @@ impl LogEntry {
     }
 
     /// Builder: set target
+    #[must_use]
     pub fn with_target(mut self, target: impl Into<String>) -> Self {
         self.target = Some(target.into());
         self
     }
 
     /// Builder: set source location
+    #[must_use]
     pub fn with_location(mut self, file: impl Into<String>, line: u32) -> Self {
         self.file = Some(file.into());
         self.line = Some(line);
@@ -104,6 +106,7 @@ impl LogEntry {
     }
 
     /// Builder: add a field
+    #[must_use]
     pub fn with_field(mut self, key: impl Into<String>, value: impl Serialize) -> Self {
         if let Ok(v) = serde_json::to_value(value) {
             self.fields.insert(key.into(), v);
@@ -112,12 +115,14 @@ impl LogEntry {
     }
 
     /// Builder: set request ID
+    #[must_use]
     pub fn with_request_id(mut self, id: impl Into<String>) -> Self {
         self.request_id = Some(id.into());
         self
     }
 
     /// Builder: set trace context
+    #[must_use]
     pub fn with_trace(mut self, trace_id: impl Into<String>, span_id: impl Into<String>) -> Self {
         self.trace_id = Some(trace_id.into());
         self.span_id = Some(span_id.into());
@@ -125,6 +130,7 @@ impl LogEntry {
     }
 
     /// Add multiple fields
+    #[must_use]
     pub fn with_fields(mut self, fields: HashMap<String, serde_json::Value>) -> Self {
         self.fields.extend(fields);
         self
@@ -134,6 +140,10 @@ impl LogEntry {
 /// Log formatter trait
 pub trait LogFormatter: Send + Sync {
     /// Format a log entry to string
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if formatting fails.
     fn format(&self, entry: &LogEntry, timestamp_format: &str) -> LogResult<String>;
 
     /// Get the format type
@@ -149,11 +159,13 @@ pub struct JsonFormatter {
 
 impl JsonFormatter {
     /// Create a new JSON formatter
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a pretty-printing formatter
+    #[must_use]
     pub fn pretty() -> Self {
         Self { pretty: true }
     }
@@ -183,11 +195,13 @@ pub struct TextFormatter {
 
 impl TextFormatter {
     /// Create a new text formatter
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create a formatter with colors
+    #[must_use]
     pub fn with_colors() -> Self {
         Self { colors: true }
     }
@@ -233,7 +247,7 @@ impl LogFormatter for TextFormatter {
 
         // Target
         if let Some(target) = &entry.target {
-            parts.push(format!("[{}]", target));
+            parts.push(format!("[{target}]"));
         }
 
         // Message
@@ -244,17 +258,17 @@ impl LogFormatter for TextFormatter {
             let fields: Vec<String> = entry
                 .fields
                 .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
+                .map(|(k, v)| format!("{k}={v}"))
                 .collect();
             parts.push(fields.join(" "));
         }
 
         // Request/Trace IDs
         if let Some(req_id) = &entry.request_id {
-            parts.push(format!("request_id={}", req_id));
+            parts.push(format!("request_id={req_id}"));
         }
         if let Some(trace_id) = &entry.trace_id {
-            parts.push(format!("trace_id={}", trace_id));
+            parts.push(format!("trace_id={trace_id}"));
         }
 
         Ok(parts.join(" "))
@@ -271,6 +285,7 @@ pub struct CompactFormatter;
 
 impl CompactFormatter {
     /// Create a new compact formatter
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -289,7 +304,7 @@ impl LogFormatter for CompactFormatter {
         let target = entry
             .target
             .as_ref()
-            .map(|t| format!("[{}] ", t))
+            .map(|t| format!("[{t}] "))
             .unwrap_or_default();
 
         Ok(format!("{} {}{}", level_char, target, entry.message))
@@ -306,6 +321,7 @@ pub struct LogfmtFormatter;
 
 impl LogfmtFormatter {
     /// Create a new logfmt formatter
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -342,7 +358,7 @@ impl LogFormatter for LogfmtFormatter {
         // Location
         if let (Some(file), Some(line)) = (&entry.file, entry.line) {
             parts.push(format!("file={}", Self::escape_value(file)));
-            parts.push(format!("line={}", line));
+            parts.push(format!("line={line}"));
         }
 
         // Request/Trace IDs
@@ -362,7 +378,7 @@ impl LogFormatter for LogfmtFormatter {
                 serde_json::Value::String(s) => Self::escape_value(s),
                 other => other.to_string(),
             };
-            parts.push(format!("{}={}", key, value_str));
+            parts.push(format!("{key}={value_str}"));
         }
 
         Ok(parts.join(" "))
@@ -374,6 +390,7 @@ impl LogFormatter for LogfmtFormatter {
 }
 
 /// Create a formatter for the given format type
+#[must_use]
 pub fn create_formatter(format: LogFormat) -> Box<dyn LogFormatter> {
     match format {
         LogFormat::Json => Box::new(JsonFormatter::new()),

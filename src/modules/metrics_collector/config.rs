@@ -17,7 +17,7 @@ pub struct MetricsCollectorConfig {
     /// Metric retention configuration.
     pub retention: RetentionConfig,
 
-    /// Global metric prefix (e.g., "r0n_gateway").
+    /// Global metric prefix (e.g., "`r0n_gateway`").
     pub prefix: String,
 
     /// Default labels applied to all metrics.
@@ -76,7 +76,7 @@ impl Default for ExporterConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            address: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+            address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             port: 9090,
             path: "/metrics".to_string(),
             compression: false,

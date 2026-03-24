@@ -45,18 +45,18 @@ pub enum TracingError {
 impl fmt::Display for TracingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Config(msg) => write!(f, "tracing config error: {}", msg),
-            Self::InvalidTraceId(msg) => write!(f, "invalid trace ID: {}", msg),
-            Self::InvalidSpanId(msg) => write!(f, "invalid span ID: {}", msg),
-            Self::Propagation(msg) => write!(f, "propagation error: {}", msg),
-            Self::Export(msg) => write!(f, "export error: {}", msg),
-            Self::SpanNotFound(msg) => write!(f, "span not found: {}", msg),
-            Self::SpanAlreadyEnded(msg) => write!(f, "span already ended: {}", msg),
-            Self::Sampling(msg) => write!(f, "sampling error: {}", msg),
-            Self::Context(msg) => write!(f, "context error: {}", msg),
-            Self::Io(e) => write!(f, "IO error: {}", e),
-            Self::Serialization(msg) => write!(f, "serialization error: {}", msg),
-            Self::Internal(msg) => write!(f, "internal error: {}", msg),
+            Self::Config(msg) => write!(f, "tracing config error: {msg}"),
+            Self::InvalidTraceId(msg) => write!(f, "invalid trace ID: {msg}"),
+            Self::InvalidSpanId(msg) => write!(f, "invalid span ID: {msg}"),
+            Self::Propagation(msg) => write!(f, "propagation error: {msg}"),
+            Self::Export(msg) => write!(f, "export error: {msg}"),
+            Self::SpanNotFound(msg) => write!(f, "span not found: {msg}"),
+            Self::SpanAlreadyEnded(msg) => write!(f, "span already ended: {msg}"),
+            Self::Sampling(msg) => write!(f, "sampling error: {msg}"),
+            Self::Context(msg) => write!(f, "context error: {msg}"),
+            Self::Io(e) => write!(f, "IO error: {e}"),
+            Self::Serialization(msg) => write!(f, "serialization error: {msg}"),
+            Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
 }

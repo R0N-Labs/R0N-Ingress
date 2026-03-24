@@ -17,6 +17,8 @@ pub struct SharedBuffer {
 
 impl SharedBuffer {
     /// Create a new shared buffer from data.
+    #[inline]
+    #[must_use]
     pub fn new(data: Vec<u8>) -> Self {
         let len = data.len();
         Self {
@@ -26,16 +28,20 @@ impl SharedBuffer {
     }
 
     /// Create from a slice (copies the data).
+    #[inline]
+    #[must_use]
     pub fn from_slice(data: &[u8]) -> Self {
         Self::new(data.to_vec())
     }
 
     /// Create an empty buffer.
+    #[must_use]
     pub fn empty() -> Self {
         Self::new(Vec::new())
     }
 
     /// Get a slice of this buffer.
+    #[must_use]
     pub fn slice(&self, range: Range<usize>) -> Self {
         let start = self.range.start + range.start;
         let end = self.range.start + range.end.min(self.len());
@@ -46,21 +52,27 @@ impl SharedBuffer {
     }
 
     /// Get the length of the visible data.
+    #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.range.len()
     }
 
     /// Check if empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Get the data as a slice.
+    #[inline]
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         &self.data[self.range.clone()]
     }
 
     /// Split at a position.
+    #[must_use]
     pub fn split_at(&self, mid: usize) -> (Self, Self) {
         let mid = mid.min(self.len());
         let left = self.slice(0..mid);
@@ -69,6 +81,7 @@ impl SharedBuffer {
     }
 
     /// Get reference count.
+    #[must_use]
     pub fn ref_count(&self) -> usize {
         Arc::strong_count(&self.data)
     }
@@ -119,11 +132,13 @@ pub struct BufferChain {
 
 impl BufferChain {
     /// Create an empty chain.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create with capacity.
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             buffers: Vec::with_capacity(capacity),
@@ -132,6 +147,7 @@ impl BufferChain {
     }
 
     /// Add a buffer to the chain.
+    #[inline]
     pub fn push(&mut self, buffer: SharedBuffer) {
         self.total_len += buffer.len();
         self.buffers.push(buffer);
@@ -143,16 +159,20 @@ impl BufferChain {
     }
 
     /// Get total length.
+    #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.total_len
     }
 
     /// Check if empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.total_len == 0
     }
 
     /// Number of buffers.
+    #[must_use]
     pub fn buffer_count(&self) -> usize {
         self.buffers.len()
     }
@@ -163,6 +183,7 @@ impl BufferChain {
     }
 
     /// Flatten into a single buffer.
+    #[must_use]
     pub fn flatten(&self) -> SharedBuffer {
         if self.buffers.len() == 1 {
             return self.buffers[0].clone();
@@ -182,6 +203,7 @@ impl BufferChain {
     }
 
     /// Get a byte at index.
+    #[must_use]
     pub fn get(&self, index: usize) -> Option<u8> {
         if index >= self.total_len {
             return None;
@@ -217,11 +239,13 @@ pub struct IoVec {
 
 impl IoVec {
     /// Create a new I/O vector.
+    #[must_use]
     pub fn new() -> Self {
         Self { slices: Vec::new() }
     }
 
     /// Create with capacity.
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             slices: Vec::with_capacity(capacity),
@@ -240,16 +264,19 @@ impl IoVec {
     }
 
     /// Total length.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.slices.iter().map(|(_, r)| r.len()).sum()
     }
 
     /// Check if empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.slices.is_empty() || self.len() == 0
     }
 
     /// Number of slices.
+    #[must_use]
     pub fn slice_count(&self) -> usize {
         self.slices.len()
     }
@@ -275,6 +302,7 @@ pub struct ReadBuffer {
 
 impl ReadBuffer {
     /// Create a new read buffer.
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             data: vec![0u8; capacity],
@@ -284,6 +312,7 @@ impl ReadBuffer {
     }
 
     /// Get available data for reading.
+    #[must_use]
     pub fn readable(&self) -> &[u8] {
         &self.data[self.read_pos..self.write_pos]
     }
@@ -310,11 +339,13 @@ impl ReadBuffer {
     }
 
     /// Get readable length.
+    #[must_use]
     pub fn readable_len(&self) -> usize {
         self.write_pos - self.read_pos
     }
 
     /// Get writable length.
+    #[must_use]
     pub fn writable_len(&self) -> usize {
         self.data.len() - self.write_pos
     }
@@ -336,6 +367,7 @@ impl ReadBuffer {
     }
 
     /// Get capacity.
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.data.len()
     }
@@ -370,6 +402,7 @@ pub struct WriteBuffer {
 
 impl WriteBuffer {
     /// Create a new write buffer.
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
@@ -378,6 +411,7 @@ impl WriteBuffer {
     }
 
     /// Get data ready for writing out.
+    #[must_use]
     pub fn pending(&self) -> &[u8] {
         &self.data[self.written..]
     }
@@ -394,6 +428,7 @@ impl WriteBuffer {
     }
 
     /// Get pending length.
+    #[must_use]
     pub fn pending_len(&self) -> usize {
         self.data.len() - self.written
     }
@@ -404,6 +439,7 @@ impl WriteBuffer {
     }
 
     /// Check if buffer has pending data.
+    #[must_use]
     pub fn has_pending(&self) -> bool {
         self.pending_len() > 0
     }
@@ -415,6 +451,7 @@ impl WriteBuffer {
     }
 
     /// Get capacity.
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.data.capacity()
     }
@@ -488,36 +525,43 @@ pub struct ByteCursor<'a> {
 
 impl<'a> ByteCursor<'a> {
     /// Create a new cursor.
+    #[must_use]
     pub fn new(data: &'a [u8]) -> Self {
         Self { data, pos: 0 }
     }
 
     /// Get current position.
+    #[must_use]
     pub fn position(&self) -> usize {
         self.pos
     }
 
     /// Get remaining data.
+    #[must_use]
     pub fn remaining(&self) -> &'a [u8] {
         &self.data[self.pos..]
     }
 
     /// Get remaining length.
+    #[must_use]
     pub fn remaining_len(&self) -> usize {
         self.data.len() - self.pos
     }
 
     /// Check if at end.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pos >= self.data.len()
     }
 
     /// Peek at next byte.
+    #[must_use]
     pub fn peek(&self) -> Option<u8> {
         self.data.get(self.pos).copied()
     }
 
     /// Peek at next n bytes.
+    #[must_use]
     pub fn peek_slice(&self, n: usize) -> Option<&'a [u8]> {
         if self.pos + n <= self.data.len() {
             Some(&self.data[self.pos..self.pos + n])
@@ -569,7 +613,7 @@ impl<'a> ByteCursor<'a> {
     }
 }
 
-impl<'a> Read for ByteCursor<'a> {
+impl Read for ByteCursor<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let remaining = self.remaining();
         let n = buf.len().min(remaining.len());
@@ -594,6 +638,7 @@ pub struct ZeroCopyStats {
 
 impl ZeroCopyStats {
     /// Get zero-copy rate.
+    #[allow(clippy::cast_precision_loss)]
     pub fn zero_copy_rate(&self) -> f64 {
         let zc = self.bytes_read_zero_copy.load(Ordering::Relaxed);
         let copied = self.bytes_copied.load(Ordering::Relaxed);

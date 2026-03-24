@@ -20,18 +20,20 @@ pub trait Injector {
     fn set(&mut self, key: &str, value: String);
 }
 
-/// HashMap implementation of Extractor
+/// `HashMap` implementation of Extractor
+#[allow(clippy::implicit_hasher)]
 impl Extractor for HashMap<String, String> {
     fn get(&self, key: &str) -> Option<&str> {
-        self.get(key).map(|s| s.as_str())
+        self.get(key).map(std::string::String::as_str)
     }
 
     fn keys(&self) -> Vec<&str> {
-        self.keys().map(|s| s.as_str()).collect()
+        self.keys().map(std::string::String::as_str).collect()
     }
 }
 
-/// HashMap implementation of Injector
+/// `HashMap` implementation of Injector
+#[allow(clippy::implicit_hasher)]
 impl Injector for HashMap<String, String> {
     fn set(&mut self, key: &str, value: String) {
         self.insert(key.to_string(), value);
@@ -62,6 +64,7 @@ impl W3CTraceContextPropagator {
     pub const TRACESTATE: &'static str = "tracestate";
 
     /// Create a new propagator
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -69,6 +72,10 @@ impl W3CTraceContextPropagator {
     /// Parse traceparent header
     /// Format: {version}-{trace-id}-{span-id}-{trace-flags}
     /// Example: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the header format is invalid.
     pub fn parse_traceparent(header: &str) -> TracingResult<(TraceId, SpanId, TraceFlags)> {
         let parts: Vec<&str> = header.split('-').collect();
         if parts.len() != 4 {
@@ -81,8 +88,7 @@ impl W3CTraceContextPropagator {
         let version = parts[0];
         if version != "00" {
             return Err(TracingError::Propagation(format!(
-                "unsupported traceparent version: {}",
-                version
+                "unsupported traceparent version: {version}"
             )));
         }
 
@@ -100,6 +106,7 @@ impl W3CTraceContextPropagator {
     }
 
     /// Format traceparent header
+    #[must_use]
     pub fn format_traceparent(trace_id: &TraceId, span_id: &SpanId, flags: &TraceFlags) -> String {
         format!(
             "00-{}-{}-{}",
@@ -157,6 +164,7 @@ impl B3SinglePropagator {
     pub const B3: &'static str = "b3";
 
     /// Create a new propagator
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -165,6 +173,10 @@ impl B3SinglePropagator {
     /// Format: {trace-id}-{span-id}-{sampling}-{parent-span-id}
     /// Or just: {trace-id}-{span-id}
     /// Or just: 0 (not sampled) or d (debug)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the header format is invalid.
     pub fn parse_b3(header: &str) -> TracingResult<(TraceId, SpanId, bool, Option<SpanId>)> {
         // Handle special cases
         if header == "0" {
@@ -212,6 +224,7 @@ impl B3SinglePropagator {
     }
 
     /// Format B3 single header
+    #[must_use]
     pub fn format_b3(
         trace_id: &TraceId,
         span_id: &SpanId,
@@ -283,6 +296,7 @@ impl B3MultiPropagator {
     pub const FLAGS: &'static str = "x-b3-flags";
 
     /// Create a new propagator
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -351,12 +365,17 @@ impl JaegerPropagator {
     pub const UBER_TRACE_ID: &'static str = "uber-trace-id";
 
     /// Create a new propagator
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Parse uber-trace-id header
     /// Format: {trace-id}:{span-id}:{parent-span-id}:{flags}
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the header format is invalid.
     pub fn parse_uber_trace_id(
         header: &str,
     ) -> TracingResult<(TraceId, SpanId, Option<SpanId>, u8)> {
@@ -387,13 +406,13 @@ impl JaegerPropagator {
         );
 
         // Parent span ID (0 means no parent)
-        let parent_span_id = if parts[2] != "0" {
+        let parent_span_id = if parts[2] == "0" {
+            None
+        } else {
             Some(SpanId::new(
                 u64::from_str_radix(parts[2], 16)
                     .map_err(|e| TracingError::InvalidSpanId(e.to_string()))?,
             ))
-        } else {
-            None
         };
 
         // Flags
@@ -403,15 +422,14 @@ impl JaegerPropagator {
     }
 
     /// Format uber-trace-id header
+    #[must_use]
     pub fn format_uber_trace_id(
         trace_id: &TraceId,
         span_id: &SpanId,
         parent_span_id: Option<&SpanId>,
         flags: u8,
     ) -> String {
-        let parent = parent_span_id
-            .map(|p| format!("{:x}", p.value()))
-            .unwrap_or_else(|| "0".to_string());
+        let parent = parent_span_id.map_or_else(|| "0".to_string(), |p| format!("{:x}", p.value()));
 
         format!(
             "{:x}:{:x}:{}:{:x}",
@@ -443,7 +461,7 @@ impl Propagator for JaegerPropagator {
             return;
         }
 
-        let flags = if context.is_sampled() { 0x01 } else { 0x00 };
+        let flags = u8::from(context.is_sampled());
 
         let header = Self::format_uber_trace_id(&context.trace_id, &context.span_id, None, flags);
         carrier.set(Self::UBER_TRACE_ID, header);
@@ -463,6 +481,7 @@ impl BaggagePropagator {
     pub const BAGGAGE: &'static str = "baggage";
 
     /// Create a new propagator
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -491,6 +510,7 @@ pub struct CompositePropagator {
 
 impl CompositePropagator {
     /// Create a new composite propagator
+    #[must_use]
     pub fn new() -> Self {
         Self {
             propagators: Vec::new(),
@@ -498,6 +518,7 @@ impl CompositePropagator {
     }
 
     /// Create with default propagators (W3C, B3, Jaeger)
+    #[must_use]
     pub fn default_propagators() -> Self {
         let mut composite = Self::new();
         composite.add(Box::new(W3CTraceContextPropagator::new()));

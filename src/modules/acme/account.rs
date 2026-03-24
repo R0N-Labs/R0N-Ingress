@@ -1,6 +1,6 @@
 //! ACME account management
 
-use super::error::{AcmeError, AcmeResult};
+use super::error::AcmeResult;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -28,6 +28,7 @@ pub struct Account {
 
 impl Account {
     /// Create a new account
+    #[must_use]
     pub fn new(id: String, url: String, credentials: AccountCredentials) -> Self {
         Self {
             id,
@@ -40,16 +41,22 @@ impl Account {
     }
 
     /// Check if account is valid
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         matches!(self.status, AccountStatus::Valid)
     }
 
     /// Get the account key thumbprint
+    #[must_use]
     pub fn key_thumbprint(&self) -> &str {
         &self.credentials.key_thumbprint
     }
 
     /// Save account to file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization or file I/O fails.
     pub fn save<P: AsRef<Path>>(&self, path: P) -> AcmeResult<()> {
         let data = AccountData {
             id: self.id.clone(),
@@ -67,6 +74,10 @@ impl Account {
     }
 
     /// Load account from file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or deserialized.
     pub fn load<P: AsRef<Path>>(path: P) -> AcmeResult<Self> {
         let json = std::fs::read_to_string(path)?;
         let data: AccountData = serde_json::from_str(&json)?;
@@ -121,10 +132,14 @@ pub struct AccountCredentials {
 
 impl AccountCredentials {
     /// Create new account credentials with a new key pair
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if key generation fails.
     pub fn generate() -> AcmeResult<Self> {
         // Generate an ECDSA P-256 key pair
-        let private_key = Self::generate_ec_key()?;
-        let thumbprint = Self::compute_thumbprint(&private_key)?;
+        let private_key = Self::generate_ec_key();
+        let thumbprint = Self::compute_thumbprint(&private_key);
 
         Ok(Self {
             private_key_pem: private_key,
@@ -133,26 +148,23 @@ impl AccountCredentials {
     }
 
     /// Generate an EC private key (P-256)
-    fn generate_ec_key() -> AcmeResult<String> {
+    fn generate_ec_key() -> String {
         // In production, use ring or openssl crate
         // This is a placeholder that returns a mock key format
         // The actual implementation would use cryptographic libraries
 
         // Generate a random 32-byte key material (for demonstration)
         let mut key_bytes = [0u8; 32];
-        getrandom(&mut key_bytes).map_err(|e| AcmeError::Crypto(e.to_string()))?;
+        getrandom(&mut key_bytes);
 
         // Format as PEM (simplified, not actual EC key format)
         let base64_key = base64_url_encode(&key_bytes);
 
-        Ok(format!(
-            "-----BEGIN EC PRIVATE KEY-----\n{}\n-----END EC PRIVATE KEY-----",
-            base64_key
-        ))
+        format!("-----BEGIN EC PRIVATE KEY-----\n{base64_key}\n-----END EC PRIVATE KEY-----")
     }
 
     /// Compute JWK thumbprint
-    fn compute_thumbprint(private_key_pem: &str) -> AcmeResult<String> {
+    fn compute_thumbprint(private_key_pem: &str) -> String {
         // In production, extract public key and compute SHA-256 of canonical JWK
         // This is simplified for demonstration
         use std::collections::hash_map::DefaultHasher;
@@ -162,12 +174,16 @@ impl AccountCredentials {
         private_key_pem.hash(&mut hasher);
         let hash = hasher.finish();
 
-        Ok(base64_url_encode(&hash.to_be_bytes()))
+        base64_url_encode(&hash.to_be_bytes())
     }
 
     /// Create from existing PEM
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the thumbprint cannot be computed.
     pub fn from_pem(pem: String) -> AcmeResult<Self> {
-        let thumbprint = Self::compute_thumbprint(&pem)?;
+        let thumbprint = Self::compute_thumbprint(&pem);
         Ok(Self {
             private_key_pem: pem,
             key_thumbprint: thumbprint,
@@ -175,6 +191,10 @@ impl AccountCredentials {
     }
 
     /// Sign data with the private key (JWS)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if signing fails.
     pub fn sign(&self, data: &[u8]) -> AcmeResult<Vec<u8>> {
         // In production, use proper ECDSA signing
         // This is a placeholder
@@ -189,6 +209,10 @@ impl AccountCredentials {
     }
 
     /// Get public key in JWK format
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the public key cannot be extracted.
     pub fn public_key_jwk(&self) -> AcmeResult<serde_json::Value> {
         // In production, extract actual public key components
         // This is simplified
@@ -202,7 +226,8 @@ impl AccountCredentials {
 }
 
 /// Get random bytes (using getrandom crate pattern)
-fn getrandom(dest: &mut [u8]) -> Result<(), std::io::Error> {
+#[allow(clippy::cast_possible_truncation)]
+fn getrandom(dest: &mut [u8]) {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     // Simple fallback using time-based pseudo-randomness
@@ -215,8 +240,6 @@ fn getrandom(dest: &mut [u8]) -> Result<(), std::io::Error> {
     for (i, byte) in dest.iter_mut().enumerate() {
         *byte = ((seed >> (i % 16)) ^ (seed >> ((i + 7) % 16))) as u8;
     }
-
-    Ok(())
 }
 
 /// Base64 URL-safe encoding without padding
@@ -247,8 +270,8 @@ fn base64_url_encode(data: &[u8]) -> String {
 }
 
 /// Base64 URL-safe decoding
-#[allow(dead_code)]
-fn base64_url_decode(data: &str) -> AcmeResult<Vec<u8>> {
+#[allow(dead_code, clippy::cast_possible_truncation)]
+fn base64_url_decode(data: &str) -> Vec<u8> {
     let mut result = Vec::new();
     let mut bits = 0u32;
     let mut bit_count = 0;
@@ -272,7 +295,7 @@ fn base64_url_decode(data: &str) -> AcmeResult<Vec<u8>> {
         }
     }
 
-    Ok(result)
+    result
 }
 
 #[cfg(test)]
@@ -352,15 +375,15 @@ mod tests {
 
     #[test]
     fn test_base64_url_decode() {
-        assert_eq!(base64_url_decode("Zm9v").unwrap(), b"foo");
-        assert_eq!(base64_url_decode("Zm8").unwrap(), b"fo");
+        assert_eq!(base64_url_decode("Zm9v"), b"foo");
+        assert_eq!(base64_url_decode("Zm8"), b"fo");
     }
 
     #[test]
     fn test_base64_roundtrip() {
         let original = b"Hello, ACME World!";
         let encoded = base64_url_encode(original);
-        let decoded = base64_url_decode(&encoded).unwrap();
+        let decoded = base64_url_decode(&encoded);
         assert_eq!(decoded, original);
     }
 }

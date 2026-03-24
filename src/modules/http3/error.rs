@@ -83,6 +83,7 @@ pub enum Http3Error {
 
 impl Http3Error {
     /// Get HTTP/3 error code
+    #[must_use]
     pub fn code(&self) -> u64 {
         match self {
             Self::NoError => 0x100,
@@ -114,6 +115,7 @@ impl Http3Error {
     }
 
     /// Create from error code
+    #[must_use]
     pub fn from_code(code: u64) -> Self {
         match code {
             0x100 => Self::NoError,
@@ -141,6 +143,7 @@ impl Http3Error {
     }
 
     /// Check if this is a connection-level error
+    #[must_use]
     pub fn is_connection_error(&self) -> bool {
         matches!(
             self,
@@ -156,6 +159,7 @@ impl Http3Error {
     }
 
     /// Check if request can be retried
+    #[must_use]
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -191,14 +195,14 @@ impl fmt::Display for Http3Error {
             Self::QpackEncoderStreamError => write!(f, "QPACK encoder stream error"),
             Self::QpackDecoderStreamError => write!(f, "QPACK decoder stream error"),
             Self::ConnectionTimeout => write!(f, "connection timeout"),
-            Self::Config(msg) => write!(f, "configuration error: {}", msg),
-            Self::Io(msg) => write!(f, "I/O error: {}", msg),
-            Self::Transport(msg) => write!(f, "transport error: {}", msg),
+            Self::Config(msg) => write!(f, "configuration error: {msg}"),
+            Self::Io(msg) => write!(f, "I/O error: {msg}"),
+            Self::Transport(msg) => write!(f, "transport error: {msg}"),
             Self::Application(code, msg) => {
                 if msg.is_empty() {
-                    write!(f, "application error: 0x{:x}", code)
+                    write!(f, "application error: 0x{code:x}")
                 } else {
-                    write!(f, "application error 0x{:x}: {}", code, msg)
+                    write!(f, "application error 0x{code:x}: {msg}")
                 }
             },
         }

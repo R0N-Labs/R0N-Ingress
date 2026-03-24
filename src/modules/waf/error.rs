@@ -31,16 +31,16 @@ pub enum WafError {
 impl fmt::Display for WafError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidConfig(msg) => write!(f, "Invalid WAF config: {}", msg),
-            Self::InvalidRule(msg) => write!(f, "Invalid rule: {}", msg),
-            Self::InvalidPattern(msg) => write!(f, "Invalid pattern: {}", msg),
-            Self::RuleCompilationFailed(msg) => write!(f, "Rule compilation failed: {}", msg),
+            Self::InvalidConfig(msg) => write!(f, "Invalid WAF config: {msg}"),
+            Self::InvalidRule(msg) => write!(f, "Invalid rule: {msg}"),
+            Self::InvalidPattern(msg) => write!(f, "Invalid pattern: {msg}"),
+            Self::RuleCompilationFailed(msg) => write!(f, "Rule compilation failed: {msg}"),
             Self::RequestBlocked { rule_id, message } => {
-                write!(f, "Request blocked by rule {}: {}", rule_id, message)
+                write!(f, "Request blocked by rule {rule_id}: {message}")
             },
-            Self::DetectionError(msg) => write!(f, "Detection error: {}", msg),
-            Self::LoggingError(msg) => write!(f, "Logging error: {}", msg),
-            Self::Internal(msg) => write!(f, "Internal WAF error: {}", msg),
+            Self::DetectionError(msg) => write!(f, "Detection error: {msg}"),
+            Self::LoggingError(msg) => write!(f, "Logging error: {msg}"),
+            Self::Internal(msg) => write!(f, "Internal WAF error: {msg}"),
         }
     }
 }
@@ -52,11 +52,13 @@ pub type WafResult<T> = Result<T, WafError>;
 
 impl WafError {
     /// Check if the error should block the request
+    #[must_use]
     pub fn should_block(&self) -> bool {
         matches!(self, Self::RequestBlocked { .. })
     }
 
     /// Check if the error is recoverable
+    #[must_use]
     pub fn is_recoverable(&self) -> bool {
         matches!(
             self,
@@ -65,6 +67,7 @@ impl WafError {
     }
 
     /// Get the rule ID if this is a blocked request
+    #[must_use]
     pub fn rule_id(&self) -> Option<&str> {
         match self {
             Self::RequestBlocked { rule_id, .. } => Some(rule_id),

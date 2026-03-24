@@ -97,14 +97,15 @@ impl MetricsPayload {
     /// Formats metrics in Prometheus text format.
     #[must_use]
     pub fn to_prometheus(&self, prefix: &str) -> String {
+        use std::fmt::Write;
         let mut output = String::new();
 
         for (name, value) in &self.counters {
-            output.push_str(&format!("{prefix}_{name} {value}\n"));
+            let _ = writeln!(output, "{prefix}_{name} {value}");
         }
 
         for (name, value) in &self.gauges {
-            output.push_str(&format!("{prefix}_{name} {value}\n"));
+            let _ = writeln!(output, "{prefix}_{name} {value}");
         }
 
         output

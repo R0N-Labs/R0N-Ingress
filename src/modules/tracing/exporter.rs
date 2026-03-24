@@ -10,12 +10,24 @@ use std::sync::{Arc, Mutex};
 /// Trait for span exporters
 pub trait SpanExporter: Send + Sync {
     /// Export a batch of spans
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if exporting fails.
     fn export(&self, spans: &[Span]) -> TracingResult<()>;
 
     /// Shutdown the exporter
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if shutdown fails.
     fn shutdown(&self) -> TracingResult<()>;
 
     /// Force flush any buffered spans
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing fails.
     fn force_flush(&self) -> TracingResult<()>;
 }
 
@@ -25,6 +37,7 @@ pub struct NoopExporter;
 
 impl NoopExporter {
     /// Create a new no-op exporter
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -53,11 +66,13 @@ pub struct ConsoleExporter {
 
 impl ConsoleExporter {
     /// Create a new console exporter
+    #[must_use]
     pub fn new() -> Self {
         Self { pretty: false }
     }
 
     /// Create a pretty-printing console exporter
+    #[must_use]
     pub fn pretty() -> Self {
         Self { pretty: true }
     }
@@ -71,7 +86,7 @@ impl SpanExporter for ConsoleExporter {
             } else {
                 serde_json::to_string(span)?
             };
-            println!("{}", json);
+            println!("{json}");
         }
         Ok(())
     }
@@ -97,6 +112,7 @@ pub struct InMemoryExporter {
 
 impl InMemoryExporter {
     /// Create a new in-memory exporter
+    #[must_use]
     pub fn new() -> Self {
         Self {
             spans: Mutex::new(Vec::new()),
@@ -105,6 +121,7 @@ impl InMemoryExporter {
     }
 
     /// Create with a maximum span limit
+    #[must_use]
     pub fn with_max_spans(max_spans: usize) -> Self {
         Self {
             spans: Mutex::new(Vec::new()),
@@ -258,6 +275,7 @@ pub struct OtlpStatus {
 }
 
 impl From<&Span> for OtlpSpan {
+    #[allow(clippy::cast_sign_loss)]
     fn from(span: &Span) -> Self {
         use super::span::{AttributeValue, SpanKind, StatusCode};
 
@@ -305,7 +323,7 @@ impl From<&Span> for OtlpSpan {
                         double_value: Some(*f),
                     },
                     _ => OtlpValue {
-                        string_value: Some(format!("{:?}", v)),
+                        string_value: Some(format!("{v:?}")),
                         int_value: None,
                         bool_value: None,
                         double_value: None,
@@ -330,7 +348,7 @@ impl From<&Span> for OtlpSpan {
                     .map(|(k, v)| OtlpAttribute {
                         key: k.clone(),
                         value: OtlpValue {
-                            string_value: Some(format!("{:?}", v)),
+                            string_value: Some(format!("{v:?}")),
                             int_value: None,
                             bool_value: None,
                             double_value: None,
@@ -441,6 +459,7 @@ pub struct JaegerLog {
 }
 
 impl From<&Span> for JaegerSpan {
+    #[allow(clippy::cast_sign_loss)]
     fn from(span: &Span) -> Self {
         use super::span::AttributeValue;
 
@@ -476,21 +495,19 @@ impl From<&Span> for JaegerSpan {
             })
             .collect();
 
-        let duration = span
-            .end_time
-            .map(|end| (end - span.start_time).num_microseconds().unwrap_or(0) as u64)
-            .unwrap_or(0);
+        let duration = span.end_time.map_or(0, |end| {
+            (end - span.start_time).num_microseconds().unwrap_or(0) as u64
+        });
 
         Self {
             trace_id: span.trace_id.to_hex(),
             span_id: span.span_id.to_hex(),
             parent_span_id: span
                 .parent_span_id
-                .map(|id| id.to_hex())
-                .unwrap_or_else(|| "0".to_string()),
+                .map_or_else(|| "0".to_string(), |id| id.to_hex()),
             operation_name: span.name.clone(),
             references: Vec::new(),
-            flags: if span.is_sampled { 1 } else { 0 },
+            flags: u8::from(span.is_sampled),
             start_time: span.start_time.timestamp_micros() as u64,
             duration,
             tags,
@@ -568,6 +585,7 @@ pub struct ZipkinAnnotation {
 
 impl ZipkinSpan {
     /// Create from span with service name
+    #[allow(clippy::cast_sign_loss)]
     pub fn from_span(span: &Span, service_name: &str) -> Self {
         use super::span::{AttributeValue, SpanKind};
 
@@ -588,7 +606,7 @@ impl ZipkinSpan {
                     AttributeValue::Bool(b) => b.to_string(),
                     AttributeValue::Int(i) => i.to_string(),
                     AttributeValue::Float(f) => f.to_string(),
-                    _ => format!("{:?}", v),
+                    _ => format!("{v:?}"),
                 };
                 (k.clone(), val)
             })
@@ -657,6 +675,10 @@ impl BatchSpanProcessor {
     }
 
     /// Add a span to the queue
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the lock is poisoned or exporting fails.
     pub fn on_end(&self, span: Span) -> TracingResult<()> {
         let mut pending = self
             .pending
@@ -681,6 +703,10 @@ impl BatchSpanProcessor {
     }
 
     /// Flush all pending spans
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing or exporting fails.
     pub fn flush(&self) -> TracingResult<()> {
         let mut pending = self
             .pending
@@ -697,6 +723,10 @@ impl BatchSpanProcessor {
     }
 
     /// Shutdown the processor
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing or shutdown fails.
     pub fn shutdown(&self) -> TracingResult<()> {
         self.flush()?;
         self.exporter.shutdown()
@@ -709,13 +739,14 @@ impl BatchSpanProcessor {
 }
 
 /// Create an exporter from configuration
+#[must_use]
 pub fn create_exporter(exporter_type: ExporterType) -> Arc<dyn SpanExporter> {
     match exporter_type {
-        ExporterType::None => Arc::new(NoopExporter::new()),
         ExporterType::Console => Arc::new(ConsoleExporter::new()),
         ExporterType::Memory => Arc::new(InMemoryExporter::new()),
         // TODO: Implement HTTP-based exporters
-        ExporterType::OtlpGrpc
+        ExporterType::None
+        | ExporterType::OtlpGrpc
         | ExporterType::OtlpHttp
         | ExporterType::Jaeger
         | ExporterType::Zipkin => Arc::new(NoopExporter::new()),
@@ -816,7 +847,7 @@ mod tests {
 
         // Add spans below batch size
         for i in 0..3 {
-            let mut span = Span::new(format!("span-{}", i), TraceId::generate());
+            let mut span = Span::new(format!("span-{i}"), TraceId::generate());
             span.end();
             processor.on_end(span).unwrap();
         }
@@ -827,7 +858,7 @@ mod tests {
 
         // Add more to trigger batch export
         for i in 3..6 {
-            let mut span = Span::new(format!("span-{}", i), TraceId::generate());
+            let mut span = Span::new(format!("span-{i}"), TraceId::generate());
             span.end();
             processor.on_end(span).unwrap();
         }

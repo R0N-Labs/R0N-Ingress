@@ -117,12 +117,9 @@ impl IpcServer {
             }
 
             // Decode message length
-            let msg_len = match decode_frame_length(&header) {
-                Some(len) => len,
-                None => {
-                    warn!("Invalid message length");
-                    continue;
-                },
+            let Some(msg_len) = decode_frame_length(header) else {
+                warn!("Invalid message length");
+                continue;
             };
 
             if msg_len > MAX_MESSAGE_SIZE {

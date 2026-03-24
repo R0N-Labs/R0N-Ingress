@@ -5,6 +5,7 @@
 use super::config::{PathTraversalConfig, SqlInjectionConfig, XssConfig};
 use super::error::WafResult;
 use regex::Regex;
+use std::borrow::Cow;
 use std::sync::LazyLock;
 
 /// Result of a detection check
@@ -28,6 +29,8 @@ pub struct DetectionResult {
 
 impl DetectionResult {
     /// Create a safe (no attack) result
+    #[inline]
+    #[must_use]
     pub fn safe() -> Self {
         Self {
             detected: false,
@@ -38,13 +41,30 @@ impl DetectionResult {
         }
     }
 
-    /// Create a detected result
+    /// Create a detected result (payload truncated to 256 bytes to reduce allocation)
+    #[inline]
+    #[must_use]
     pub fn detected(attack_type: &str, confidence: f64, payload: &str, details: &str) -> Self {
+        const MAX_PAYLOAD: usize = 256;
+        let truncated = if payload.len() <= MAX_PAYLOAD {
+            payload.to_string()
+        } else {
+            // Find a valid UTF-8 boundary
+            let end = payload
+                .char_indices()
+                .take_while(|(i, _)| *i <= MAX_PAYLOAD)
+                .last()
+                .map_or(MAX_PAYLOAD, |(i, c)| i + c.len_utf8());
+            let mut s = payload[..end].to_string();
+            s.push_str("...");
+            s
+        };
+
         Self {
             detected: true,
             confidence,
             attack_type: attack_type.to_string(),
-            matched_payload: Some(payload.to_string()),
+            matched_payload: Some(truncated),
             details: details.to_string(),
         }
     }
@@ -56,6 +76,10 @@ pub trait Detector: Send + Sync {
     fn name(&self) -> &str;
 
     /// Detect attacks in input
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if detection processing fails.
     fn detect(&self, input: &str) -> WafResult<DetectionResult>;
 
     /// Check if detector is enabled
@@ -91,16 +115,18 @@ pub struct SqlInjectionDetector {
 
 impl SqlInjectionDetector {
     /// Create new detector with config
+    #[must_use]
     pub fn new(config: SqlInjectionConfig) -> Self {
         Self { config }
     }
 
     /// Create with default config
+    #[must_use]
     pub fn default_config() -> Self {
         Self::new(SqlInjectionConfig::default())
     }
 
-    fn decode_input(&self, input: &str) -> String {
+    fn decode_input(input: &str) -> String {
         // URL decode
         let mut decoded = input.to_string();
 
@@ -134,51 +160,51 @@ impl SqlInjectionDetector {
         decoded.to_lowercase()
     }
 
-    fn calculate_score(&self, input: &str) -> (u32, Vec<String>) {
-        let decoded = self.decode_input(input);
+    fn calculate_score(input: &str) -> (u32, Vec<&'static str>) {
+        let decoded = Self::decode_input(input);
         let mut score = 0u32;
         let mut indicators = Vec::new();
 
         // Check for UNION SELECT - high severity attack pattern
         if SQLI_UNION_SELECT.is_match(&decoded) {
             score += 6;
-            indicators.push("UNION SELECT attack detected".to_string());
+            indicators.push("UNION SELECT attack detected");
         }
 
         // Check for SQL keywords
         if SQLI_KEYWORDS.is_match(&decoded) {
             score += 3;
-            indicators.push("SQL keywords detected".to_string());
+            indicators.push("SQL keywords detected");
         }
 
         // Check for boolean operators with values
         if SQLI_OPERATORS.is_match(&decoded) {
             score += 4;
-            indicators.push("Boolean operator injection".to_string());
+            indicators.push("Boolean operator injection");
         }
 
         // Check for comment markers
         if SQLI_COMMENTS.is_match(&decoded) {
             score += 2;
-            indicators.push("Comment markers detected".to_string());
+            indicators.push("Comment markers detected");
         }
 
         // Check for tautologies
         if SQLI_TAUTOLOGY.is_match(&decoded) {
             score += 5;
-            indicators.push("Tautology detected".to_string());
+            indicators.push("Tautology detected");
         }
 
         // Check for quote-based injection
         if SQLI_QUOTES.is_match(&decoded) {
             score += 4;
-            indicators.push("Quote-based injection".to_string());
+            indicators.push("Quote-based injection");
         }
 
         // Check for stacked queries
         if decoded.contains(';') && SQLI_KEYWORDS.is_match(&decoded) {
             score += 3;
-            indicators.push("Stacked query attempt".to_string());
+            indicators.push("Stacked query attempt");
         }
 
         (score, indicators)
@@ -186,7 +212,7 @@ impl SqlInjectionDetector {
 }
 
 impl Detector for SqlInjectionDetector {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "SQL Injection Detector"
     }
 
@@ -195,20 +221,19 @@ impl Detector for SqlInjectionDetector {
             return Ok(DetectionResult::safe());
         }
 
-        let (score, indicators) = self.calculate_score(input);
+        let (score, indicators) = Self::calculate_score(input);
 
         // Threshold based on sensitivity
         let threshold = match self.config.sensitivity {
             1 => 10,
             2 => 7,
-            3 => 5,
             4 => 3,
             5 => 2,
             _ => 5,
         };
 
         if score >= threshold {
-            let confidence = (score as f64 / 15.0).min(1.0);
+            let confidence = (f64::from(score) / 15.0).min(1.0);
             Ok(DetectionResult::detected(
                 "SQL Injection",
                 confidence,
@@ -254,16 +279,18 @@ pub struct XssDetector {
 
 impl XssDetector {
     /// Create new detector with config
+    #[must_use]
     pub fn new(config: XssConfig) -> Self {
         Self { config }
     }
 
     /// Create with default config
+    #[must_use]
     pub fn default_config() -> Self {
         Self::new(XssConfig::default())
     }
 
-    fn decode_input(&self, input: &str) -> String {
+    fn decode_input(input: &str) -> String {
         let mut decoded = input.to_string();
 
         // URL decode
@@ -309,51 +336,51 @@ impl XssDetector {
         decoded
     }
 
-    fn calculate_score(&self, input: &str) -> (u32, Vec<String>) {
-        let decoded = self.decode_input(input);
+    fn calculate_score(&self, input: &str) -> (u32, Vec<&'static str>) {
+        let decoded = Self::decode_input(input);
         let mut score = 0u32;
         let mut indicators = Vec::new();
 
         // Script tag
         if XSS_SCRIPT_TAG.is_match(&decoded) {
             score += 10;
-            indicators.push("Script tag detected".to_string());
+            indicators.push("Script tag detected");
         }
 
         // Event handlers
         if self.config.block_event_handlers && XSS_EVENT_HANDLER.is_match(&decoded) {
             score += 8;
-            indicators.push("Event handler detected".to_string());
+            indicators.push("Event handler detected");
         }
 
         // JavaScript protocol
         if self.config.block_inline_js && XSS_JAVASCRIPT_PROTO.is_match(&decoded) {
             score += 8;
-            indicators.push("JavaScript protocol detected".to_string());
+            indicators.push("JavaScript protocol detected");
         }
 
         // HTML injection
         if XSS_HTML_INJECTION.is_match(&decoded) {
             score += 4;
-            indicators.push("HTML tag injection".to_string());
+            indicators.push("HTML tag injection");
         }
 
         // Expression/behavior
         if XSS_EXPRESSION.is_match(&decoded) {
             score += 6;
-            indicators.push("CSS expression detected".to_string());
+            indicators.push("CSS expression detected");
         }
 
         // Eval and similar
         if XSS_EVAL.is_match(&decoded) {
             score += 5;
-            indicators.push("Eval-like function detected".to_string());
+            indicators.push("Eval-like function detected");
         }
 
         // Basic angle brackets with potential payload
         if decoded.contains('<') && decoded.contains('>') {
             score += 2;
-            indicators.push("HTML-like content".to_string());
+            indicators.push("HTML-like content");
         }
 
         (score, indicators)
@@ -361,7 +388,7 @@ impl XssDetector {
 }
 
 impl Detector for XssDetector {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "XSS Detector"
     }
 
@@ -375,14 +402,13 @@ impl Detector for XssDetector {
         let threshold = match self.config.sensitivity {
             1 => 12,
             2 => 9,
-            3 => 6,
             4 => 4,
             5 => 2,
             _ => 6,
         };
 
         if score >= threshold {
-            let confidence = (score as f64 / 15.0).min(1.0);
+            let confidence = (f64::from(score) / 15.0).min(1.0);
             Ok(DetectionResult::detected(
                 "Cross-Site Scripting (XSS)",
                 confidence,
@@ -421,16 +447,18 @@ pub struct PathTraversalDetector {
 
 impl PathTraversalDetector {
     /// Create new detector with config
+    #[must_use]
     pub fn new(config: PathTraversalConfig) -> Self {
         Self { config }
     }
 
     /// Create with default config
+    #[must_use]
     pub fn default_config() -> Self {
         Self::new(PathTraversalConfig::default())
     }
 
-    fn decode_input(&self, input: &str) -> String {
+    fn decode_input(input: &str) -> String {
         let mut decoded = input.to_string();
 
         // Multiple rounds of URL decoding to catch double encoding
@@ -465,55 +493,55 @@ impl PathTraversalDetector {
         decoded
     }
 
-    fn count_depth(&self, path: &str) -> usize {
+    fn count_depth(path: &str) -> usize {
         path.split(['/', '\\'])
             .filter(|s| !s.is_empty() && *s != "." && *s != "..")
             .count()
     }
 
-    fn calculate_score(&self, input: &str) -> (u32, Vec<String>) {
-        let decoded = self.decode_input(input);
+    #[allow(clippy::cast_possible_truncation)]
+    fn calculate_score(&self, input: &str) -> (u32, Vec<Cow<'static, str>>) {
+        let decoded = Self::decode_input(input);
         let mut score = 0u32;
-        let mut indicators = Vec::new();
+        let mut indicators: Vec<Cow<'static, str>> = Vec::new();
 
         // Basic path traversal
         if PATH_TRAVERSAL_BASIC.is_match(&decoded) {
             score += 10;
-            indicators.push("Path traversal sequence detected".to_string());
+            indicators.push(Cow::Borrowed("Path traversal sequence detected"));
         }
 
         // Encoded traversal
         if self.config.block_encoded && PATH_TRAVERSAL_ENCODED.is_match(input) {
             score += 8;
-            indicators.push("Encoded path traversal".to_string());
+            indicators.push(Cow::Borrowed("Encoded path traversal"));
         }
 
         // Null byte injection
         if self.config.block_null_bytes && PATH_TRAVERSAL_NULL.is_match(input) {
             score += 10;
-            indicators.push("Null byte injection".to_string());
+            indicators.push(Cow::Borrowed("Null byte injection"));
         }
 
         // Sensitive file access
         if PATH_TRAVERSAL_SENSITIVE.is_match(&decoded) {
             score += 8;
-            indicators.push("Sensitive file access attempt".to_string());
+            indicators.push(Cow::Borrowed("Sensitive file access attempt"));
         }
 
         // Path depth check
-        if self.count_depth(&decoded) > self.config.max_path_depth {
+        if Self::count_depth(&decoded) > self.config.max_path_depth {
             score += 3;
-            indicators.push("Excessive path depth".to_string());
+            indicators.push(Cow::Borrowed("Excessive path depth"));
         }
 
         // Multiple .. sequences
         let traversal_count = decoded.matches("..").count();
         if traversal_count > 2 {
             score += traversal_count as u32;
-            indicators.push(format!(
-                "Multiple traversal sequences ({})",
-                traversal_count
-            ));
+            indicators.push(Cow::Owned(format!(
+                "Multiple traversal sequences ({traversal_count})"
+            )));
         }
 
         (score, indicators)
@@ -521,7 +549,7 @@ impl PathTraversalDetector {
 }
 
 impl Detector for PathTraversalDetector {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "Path Traversal Detector"
     }
 
@@ -536,7 +564,7 @@ impl Detector for PathTraversalDetector {
         let threshold = 5;
 
         if score >= threshold {
-            let confidence = (score as f64 / 15.0).min(1.0);
+            let confidence = (f64::from(score) / 15.0).min(1.0);
             Ok(DetectionResult::detected(
                 "Path Traversal",
                 confidence,
@@ -579,7 +607,7 @@ mod tests {
 
         for attack in &attacks {
             let result = detector.detect(attack).unwrap();
-            assert!(result.detected, "Should detect: {}", attack);
+            assert!(result.detected, "Should detect: {attack}");
         }
     }
 
@@ -637,7 +665,7 @@ mod tests {
 
         for attack in &attacks {
             let result = detector.detect(attack).unwrap();
-            assert!(result.detected, "Should detect: {}", attack);
+            assert!(result.detected, "Should detect: {attack}");
         }
     }
 
@@ -687,7 +715,7 @@ mod tests {
 
         for attack in &attacks {
             let result = detector.detect(attack).unwrap();
-            assert!(result.detected, "Should detect: {}", attack);
+            assert!(result.detected, "Should detect: {attack}");
         }
     }
 
@@ -720,11 +748,12 @@ mod tests {
 
         for attack in &attacks {
             let result = detector.detect(attack).unwrap();
-            assert!(result.detected, "Should detect: {}", attack);
+            assert!(result.detected, "Should detect: {attack}");
         }
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_detection_result_methods() {
         let safe = DetectionResult::safe();
         assert!(!safe.detected);

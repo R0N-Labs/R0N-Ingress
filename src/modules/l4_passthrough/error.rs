@@ -63,6 +63,7 @@ pub enum L4Error {
 
 impl L4Error {
     /// Check if this error is recoverable.
+    #[must_use]
     pub fn is_recoverable(&self) -> bool {
         matches!(
             self,
@@ -74,6 +75,7 @@ impl L4Error {
     }
 
     /// Check if this error should trigger a backend health check.
+    #[must_use]
     pub fn should_check_health(&self) -> bool {
         matches!(
             self,

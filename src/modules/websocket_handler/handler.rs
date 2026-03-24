@@ -248,6 +248,7 @@ impl PathRouter {
 
 impl WebSocketHandler {
     /// Create a new WebSocket handler.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: WebSocketHandlerConfig::default(),
@@ -261,6 +262,7 @@ impl WebSocketHandler {
     }
 
     /// Create with configuration.
+    #[must_use]
     pub fn with_config(config: WebSocketHandlerConfig) -> Self {
         Self {
             config,
@@ -269,11 +271,13 @@ impl WebSocketHandler {
     }
 
     /// Get current statistics.
+    #[must_use]
     pub fn stats(&self) -> &Arc<WebSocketStats> {
         &self.stats
     }
 
     /// Handle a client connection.
+    #[allow(clippy::too_many_lines)]
     async fn handle_connection(
         mut stream: TcpStream,
         addr: SocketAddr,
@@ -351,9 +355,10 @@ impl WebSocketHandler {
         let route = router_read.find_route(&request.path);
         let backend_config = match route {
             Some(r) => &r.backend,
-            None => match router_read.default_backend() {
-                Some(b) => b,
-                None => {
+            None => {
+                if let Some(b) = router_read.default_backend() {
+                    b
+                } else {
                     warn!(addr = %addr, path = %request.path, "No route found");
                     stats.upgrade_failed();
                     let _ = stream
@@ -364,7 +369,7 @@ impl WebSocketHandler {
                         .await;
                     stats.connection_closed();
                     return;
-                },
+                }
             },
         };
         let backend_config = backend_config.clone();
@@ -412,13 +417,14 @@ impl WebSocketHandler {
                 ))
                 .await
                 {
-                    Ok(mut addrs) => match addrs.next() {
-                        Some(addr) => addr,
-                        None => {
+                    Ok(mut addrs) => {
+                        if let Some(addr) = addrs.next() {
+                            addr
+                        } else {
                             error!("No addresses resolved for backend");
                             stats.connection_closed();
                             return;
-                        },
+                        }
                     },
                     Err(e) => {
                         error!(error = %e, "Failed to resolve backend address");
@@ -478,6 +484,7 @@ impl WebSocketHandler {
     }
 
     /// Proxy messages between client and backend WebSocket connections.
+    #[allow(clippy::too_many_lines)]
     async fn proxy_messages(
         client: WebSocketStream<TcpStream>,
         backend: WebSocketStream<TcpStream>,
@@ -616,8 +623,8 @@ impl WebSocketHandler {
 
         // Run both directions concurrently
         tokio::select! {
-            _ = c2b => {},
-            _ = b2c => {},
+            () = c2b => {},
+            () = b2c => {},
         }
     }
 }
@@ -699,16 +706,13 @@ impl ModuleContract for WebSocketHandler {
 
         // Start listeners
         for listener_config in &self.config.listeners {
-            let addr = match listener_config.socket_addr() {
-                Some(a) => a,
-                None => {
-                    warn!(
-                        address = %listener_config.address,
-                        port = %listener_config.port,
-                        "Invalid listener address"
-                    );
-                    continue;
-                },
+            let Some(addr) = listener_config.socket_addr() else {
+                warn!(
+                    address = %listener_config.address,
+                    port = %listener_config.port,
+                    "Invalid listener address"
+                );
+                continue;
             };
 
             let config = Arc::new(self.config.clone());
@@ -789,6 +793,7 @@ impl ModuleContract for WebSocketHandler {
         self.status == ModuleStatus::Running
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 

@@ -55,6 +55,7 @@ pub struct QuicTransport {
 
 impl QuicTransport {
     /// Create new transport
+    #[must_use]
     pub fn new(config: QuicConfig) -> Self {
         Self {
             config,
@@ -104,6 +105,10 @@ impl QuicTransport {
     }
 
     /// Accept new connection
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection cannot be established.
     pub async fn accept_connection(
         &self,
         source_cid: ConnectionId,
@@ -138,6 +143,10 @@ impl QuicTransport {
     }
 
     /// Create outbound connection
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection ID cannot be generated.
     pub async fn connect(
         &self,
         remote_addr: SocketAddr,
@@ -260,11 +269,11 @@ impl std::fmt::Debug for QuicTransport {
                 "bytes_received",
                 &self.bytes_received.load(Ordering::SeqCst),
             )
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
-/// QUIC handler implementing ModuleContract
+/// QUIC handler implementing `ModuleContract`
 pub struct QuicHandler {
     /// Transport
     transport: Option<QuicTransport>,
@@ -275,6 +284,7 @@ pub struct QuicHandler {
 
 impl QuicHandler {
     /// Create new handler
+    #[must_use]
     pub fn new() -> Self {
         Self {
             transport: None,

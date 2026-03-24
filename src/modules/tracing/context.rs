@@ -17,11 +17,13 @@ impl TraceFlags {
     pub const SAMPLED: Self = Self(0x01);
 
     /// Create new trace flags
+    #[must_use]
     pub fn new(flags: u8) -> Self {
         Self(flags)
     }
 
     /// Check if sampled flag is set
+    #[must_use]
     pub fn is_sampled(&self) -> bool {
         (self.0 & 0x01) != 0
     }
@@ -36,11 +38,13 @@ impl TraceFlags {
     }
 
     /// Get the raw flags value
+    #[must_use]
     pub fn value(&self) -> u8 {
         self.0
     }
 
     /// Convert to hex string (2 chars)
+    #[must_use]
     pub fn to_hex(&self) -> String {
         format!("{:02x}", self.0)
     }
@@ -72,6 +76,7 @@ pub struct SpanContext {
 
 impl SpanContext {
     /// Create a new span context
+    #[must_use]
     pub fn new(trace_id: TraceId, span_id: SpanId) -> Self {
         Self {
             trace_id,
@@ -83,6 +88,7 @@ impl SpanContext {
     }
 
     /// Create an invalid span context
+    #[must_use]
     pub fn invalid() -> Self {
         Self {
             trace_id: TraceId::invalid(),
@@ -94,28 +100,33 @@ impl SpanContext {
     }
 
     /// Check if this context is valid
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         self.trace_id.is_valid() && self.span_id.is_valid()
     }
 
     /// Check if this span should be sampled
+    #[must_use]
     pub fn is_sampled(&self) -> bool {
         self.trace_flags.is_sampled()
     }
 
     /// Set sampled flag
+    #[must_use]
     pub fn with_sampled(mut self, sampled: bool) -> Self {
         self.trace_flags.set_sampled(sampled);
         self
     }
 
     /// Set as remote context
+    #[must_use]
     pub fn with_remote(mut self, remote: bool) -> Self {
         self.is_remote = remote;
         self
     }
 
     /// Set trace state
+    #[must_use]
     pub fn with_trace_state(mut self, trace_state: TraceState) -> Self {
         self.trace_state = trace_state;
         self
@@ -139,6 +150,7 @@ impl TraceState {
     pub const MAX_ENTRIES: usize = 32;
 
     /// Create a new empty trace state
+    #[must_use]
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
@@ -146,6 +158,7 @@ impl TraceState {
     }
 
     /// Parse from header value
+    #[must_use]
     pub fn from_header(header: &str) -> Self {
         let mut entries = Vec::new();
 
@@ -164,15 +177,17 @@ impl TraceState {
     }
 
     /// Convert to header value
+    #[must_use]
     pub fn to_header(&self) -> String {
         self.entries
             .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
+            .map(|(k, v)| format!("{k}={v}"))
             .collect::<Vec<_>>()
             .join(",")
     }
 
     /// Get a value by key
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&str> {
         self.entries
             .iter()
@@ -200,11 +215,13 @@ impl TraceState {
     }
 
     /// Check if empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Get number of entries
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -239,6 +256,7 @@ impl Baggage {
     pub const MAX_SIZE: usize = 8192;
 
     /// Create new empty baggage
+    #[must_use]
     pub fn new() -> Self {
         Self {
             items: HashMap::new(),
@@ -246,11 +264,13 @@ impl Baggage {
     }
 
     /// Get a value
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&str> {
         self.items.get(key).map(|e| e.value.as_str())
     }
 
     /// Get an entry with metadata
+    #[must_use]
     pub fn get_entry(&self, key: &str) -> Option<&BaggageEntry> {
         self.items.get(key)
     }
@@ -292,11 +312,13 @@ impl Baggage {
     }
 
     /// Check if empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
     /// Get number of items
+    #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -307,6 +329,7 @@ impl Baggage {
     }
 
     /// Parse from header value
+    #[must_use]
     pub fn from_header(header: &str) -> Self {
         let mut baggage = Self::new();
 
@@ -337,6 +360,7 @@ impl Baggage {
     }
 
     /// Convert to header value
+    #[must_use]
     pub fn to_header(&self) -> String {
         self.items
             .iter()
@@ -353,6 +377,7 @@ impl Baggage {
 }
 
 /// Context for trace propagation
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone, Default)]
 pub struct Context {
     /// Span context
@@ -367,11 +392,13 @@ pub struct Context {
 
 impl Context {
     /// Create a new empty context
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create context with span context
+    #[must_use]
     pub fn with_span_context(span_context: SpanContext) -> Self {
         Self {
             span_context: Some(span_context),
@@ -381,6 +408,7 @@ impl Context {
     }
 
     /// Get the span context
+    #[must_use]
     pub fn span_context(&self) -> Option<&SpanContext> {
         self.span_context.as_ref()
     }
@@ -391,6 +419,7 @@ impl Context {
     }
 
     /// Get the baggage
+    #[must_use]
     pub fn baggage(&self) -> &Baggage {
         &self.baggage
     }
@@ -406,8 +435,9 @@ impl Context {
     }
 
     /// Get a custom value
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.values.get(key).map(|s| s.as_str())
+        self.values.get(key).map(std::string::String::as_str)
     }
 
     /// Set a custom value
@@ -416,8 +446,11 @@ impl Context {
     }
 
     /// Check if context has a valid span
+    #[must_use]
     pub fn has_valid_span(&self) -> bool {
-        self.span_context.as_ref().is_some_and(|c| c.is_valid())
+        self.span_context
+            .as_ref()
+            .is_some_and(SpanContext::is_valid)
     }
 }
 
@@ -425,6 +458,7 @@ impl Context {
 pub type SharedContext = Arc<RwLock<Context>>;
 
 /// Create a new shared context
+#[must_use]
 pub fn new_shared_context() -> SharedContext {
     Arc::new(RwLock::new(Context::new()))
 }

@@ -12,7 +12,7 @@ R0N Ingress is a modular, high-performance network gateway designed for modern c
 
 ```bash
 # Clone the repository
-git clone https://github.com/r0n/r0n-ingress.git
+git clone https://github.com/R0N-Labs/R0N-Ingress
 cd r0n-ingress
 
 # Build release binary
@@ -48,8 +48,8 @@ sudo dnf install gcc openssl-devel
 ### Docker
 
 ```bash
-docker pull ghcr.io/r0n/r0n-ingress:latest
-docker run -p 8080:8080 -v /path/to/config:/etc/r0n ghcr.io/r0n/r0n-ingress
+docker pull ghcr.io/R0N-Labs/R0N-Ingress:latest
+docker run -p 8080:8080 -v /path/to/config:/etc/r0n ghcr.io/R0N-Labs/R0N-Ingress:latest
 ```
 
 ---

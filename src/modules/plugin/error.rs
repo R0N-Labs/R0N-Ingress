@@ -163,29 +163,25 @@ impl fmt::Display for PluginError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound { name } => {
-                write!(f, "Plugin not found: {}", name)
+                write!(f, "Plugin not found: {name}")
             },
             Self::AlreadyExists { name } => {
-                write!(f, "Plugin already exists: {}", name)
+                write!(f, "Plugin already exists: {name}")
             },
             Self::LoadError { source, message } => {
-                write!(f, "Failed to load plugin '{}': {}", source, message)
+                write!(f, "Failed to load plugin '{source}': {message}")
             },
             Self::CompilationError { message } => {
-                write!(f, "WASM compilation error: {}", message)
+                write!(f, "WASM compilation error: {message}")
             },
             Self::InstantiationError { message } => {
-                write!(f, "WASM instantiation error: {}", message)
+                write!(f, "WASM instantiation error: {message}")
             },
             Self::ExecutionError { function, message } => {
-                write!(f, "Execution error in '{}': {}", function, message)
+                write!(f, "Execution error in '{function}': {message}")
             },
             Self::FunctionNotFound { plugin, function } => {
-                write!(
-                    f,
-                    "Function '{}' not found in plugin '{}'",
-                    function, plugin
-                )
+                write!(f, "Function '{function}' not found in plugin '{plugin}'")
             },
             Self::InvalidSignature {
                 function,
@@ -194,12 +190,11 @@ impl fmt::Display for PluginError {
             } => {
                 write!(
                     f,
-                    "Invalid signature for '{}': expected {}, got {}",
-                    function, expected, actual
+                    "Invalid signature for '{function}': expected {expected}, got {actual}"
                 )
             },
             Self::MemoryError { message } => {
-                write!(f, "Memory error: {}", message)
+                write!(f, "Memory error: {message}")
             },
             Self::ResourceLimitExceeded {
                 resource,
@@ -208,46 +203,41 @@ impl fmt::Display for PluginError {
             } => {
                 write!(
                     f,
-                    "Resource limit exceeded: {} limit is {}, attempted {}",
-                    resource, limit, attempted
+                    "Resource limit exceeded: {resource} limit is {limit}, attempted {attempted}"
                 )
             },
             Self::Timeout { timeout_ms } => {
-                write!(f, "Execution timeout after {}ms", timeout_ms)
+                write!(f, "Execution timeout after {timeout_ms}ms")
             },
             Self::PolicyViolation { policy, action } => {
-                write!(f, "Policy violation: {} denied action '{}'", policy, action)
+                write!(f, "Policy violation: {policy} denied action '{action}'")
             },
             Self::InvalidManifest { message } => {
-                write!(f, "Invalid plugin manifest: {}", message)
+                write!(f, "Invalid plugin manifest: {message}")
             },
             Self::VersionMismatch { required, actual } => {
-                write!(f, "Version mismatch: required {}, got {}", required, actual)
+                write!(f, "Version mismatch: required {required}, got {actual}")
             },
             Self::InvalidState { current, expected } => {
-                write!(
-                    f,
-                    "Invalid state: expected {}, currently {}",
-                    expected, current
-                )
+                write!(f, "Invalid state: expected {expected}, currently {current}")
             },
             Self::SerializationError { message } => {
-                write!(f, "Serialization error: {}", message)
+                write!(f, "Serialization error: {message}")
             },
             Self::HostFunctionError { function, message } => {
-                write!(f, "Host function '{}' error: {}", function, message)
+                write!(f, "Host function '{function}' error: {message}")
             },
             Self::CapabilityDenied { capability } => {
-                write!(f, "Capability denied: {}", capability)
+                write!(f, "Capability denied: {capability}")
             },
             Self::IoError { message } => {
-                write!(f, "IO error: {}", message)
+                write!(f, "IO error: {message}")
             },
             Self::ConfigError { message } => {
-                write!(f, "Configuration error: {}", message)
+                write!(f, "Configuration error: {message}")
             },
             Self::Internal { message } => {
-                write!(f, "Internal error: {}", message)
+                write!(f, "Internal error: {message}")
             },
         }
     }
@@ -265,6 +255,7 @@ impl From<std::io::Error> for PluginError {
 
 impl PluginError {
     /// Check if error is retryable.
+    #[must_use]
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -273,6 +264,7 @@ impl PluginError {
     }
 
     /// Check if error is a security violation.
+    #[must_use]
     pub fn is_security_error(&self) -> bool {
         matches!(
             self,
@@ -281,6 +273,7 @@ impl PluginError {
     }
 
     /// Check if error indicates plugin is broken.
+    #[must_use]
     pub fn is_fatal(&self) -> bool {
         matches!(
             self,
@@ -316,6 +309,7 @@ impl PluginError {
     }
 
     /// Create a timeout error.
+    #[must_use]
     pub fn timeout(timeout_ms: u64) -> Self {
         Self::Timeout { timeout_ms }
     }
@@ -348,11 +342,11 @@ mod tests {
     fn test_error_retryable() {
         assert!(PluginError::Timeout { timeout_ms: 100 }.is_retryable());
         assert!(PluginError::IoError {
-            message: "".to_string()
+            message: String::new()
         }
         .is_retryable());
         assert!(!PluginError::NotFound {
-            name: "".to_string()
+            name: String::new()
         }
         .is_retryable());
     }
@@ -374,11 +368,11 @@ mod tests {
     #[test]
     fn test_error_fatal() {
         assert!(PluginError::CompilationError {
-            message: "".to_string()
+            message: String::new()
         }
         .is_fatal());
         assert!(PluginError::InvalidManifest {
-            message: "".to_string()
+            message: String::new()
         }
         .is_fatal());
         assert!(!PluginError::Timeout { timeout_ms: 100 }.is_fatal());

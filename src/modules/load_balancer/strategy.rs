@@ -3,7 +3,6 @@
 use super::backend::Backend;
 use super::config::StickyHashKey;
 use super::error::{LoadBalancerError, LoadBalancerResult};
-use rand::Rng;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::net::SocketAddr;
@@ -153,6 +152,7 @@ impl Default for WeightedRoundRobinStrategy {
 }
 
 impl Strategy for WeightedRoundRobinStrategy {
+    #[allow(clippy::cast_possible_truncation)]
     fn select<'a>(
         &'a self,
         backends: &'a [Arc<Backend>],
@@ -328,6 +328,7 @@ impl HashStrategy {
 }
 
 impl Strategy for HashStrategy {
+    #[allow(clippy::cast_possible_truncation)]
     fn select<'a>(
         &'a self,
         backends: &'a [Arc<Backend>],
@@ -435,7 +436,7 @@ impl Strategy for RandomStrategy {
                 return Err(LoadBalancerError::NoHealthyBackends("pool".to_string()));
             }
 
-            let idx = rand::rng().random_range(0..healthy.len());
+            let idx = rand::RngExt::random_range(&mut rand::rng(), 0..healthy.len());
             Ok(healthy[idx])
         })
     }
@@ -451,6 +452,7 @@ mod tests {
     use crate::modules::load_balancer::config::BackendConfig;
     use std::net::{IpAddr, Ipv4Addr};
 
+    #[allow(clippy::cast_possible_truncation)]
     fn make_backends(count: usize) -> Vec<Arc<Backend>> {
         (0..count)
             .map(|i| {
@@ -502,7 +504,7 @@ mod tests {
 
         // Should be roughly even distribution
         for count in &counts {
-            assert!(*count >= 8 && *count <= 12, "counts: {:?}", counts);
+            assert!(*count >= 8 && *count <= 12, "counts: {counts:?}");
         }
     }
 
@@ -553,7 +555,7 @@ mod tests {
 
         // Backend 1 has weight 3, backend 2 has weight 1
         // So backend 1 should get ~3x the traffic
-        assert!(counts[0] > counts[1] * 2, "counts: {:?}", counts);
+        assert!(counts[0] > counts[1] * 2, "counts: {counts:?}");
     }
 
     #[tokio::test]

@@ -39,11 +39,19 @@ pub struct PooledConnection {
 
 impl PooledConnection {
     /// Get the underlying stream.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been taken.
     pub fn stream(&mut self) -> &mut TcpStream {
         self.stream.as_mut().expect("stream taken")
     }
 
     /// Take ownership of the stream (connection will not be returned to pool).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the stream has already been taken.
     pub fn take(mut self) -> TcpStream {
         self.stream.take().expect("stream taken")
     }
@@ -128,6 +136,7 @@ struct PoolStatsInner {
     timeouts: AtomicU64,
     discarded: AtomicU64,
     active: AtomicUsize,
+    pooled: AtomicUsize,
 }
 
 impl Default for PoolStatsInner {
@@ -138,6 +147,7 @@ impl Default for PoolStatsInner {
             timeouts: AtomicU64::new(0),
             discarded: AtomicU64::new(0),
             active: AtomicUsize::new(0),
+            pooled: AtomicUsize::new(0),
         }
     }
 }
@@ -169,6 +179,7 @@ impl ConnectionPoolInner {
 
         pool.push(entry);
         self.stats.active.fetch_sub(1, Ordering::Relaxed);
+        self.stats.pooled.fetch_add(1, Ordering::Relaxed);
         debug!(backend = %addr, pooled = pool.len(), "Connection returned to pool");
     }
 }
@@ -221,12 +232,14 @@ impl ConnectionPool {
             // Check if connection is too old
             if entry.created_at.elapsed() > DEFAULT_MAX_LIFETIME {
                 self.inner.stats.discarded.fetch_add(1, Ordering::Relaxed);
+                self.inner.stats.pooled.fetch_sub(1, Ordering::Relaxed);
                 continue;
             }
 
             // Check if connection has been idle too long
             if entry.returned_at.elapsed() > self.inner.settings.idle_timeout() {
                 self.inner.stats.discarded.fetch_add(1, Ordering::Relaxed);
+                self.inner.stats.pooled.fetch_sub(1, Ordering::Relaxed);
                 continue;
             }
 
@@ -235,6 +248,7 @@ impl ConnectionPool {
                 .total_reused
                 .fetch_add(1, Ordering::Relaxed);
             self.inner.stats.active.fetch_add(1, Ordering::Relaxed);
+            self.inner.stats.pooled.fetch_sub(1, Ordering::Relaxed);
 
             debug!(backend = %backend_addr, "Reusing pooled connection");
 
@@ -302,14 +316,13 @@ impl ConnectionPool {
     }
 
     /// Get pool statistics.
-    pub async fn stats(&self) -> PoolStats {
-        let connections = self.inner.connections.lock().await;
-        let pooled: usize = connections.values().map(|v| v.len()).sum();
-
+    #[inline]
+    #[must_use]
+    pub fn stats(&self) -> PoolStats {
         PoolStats {
             total_created: self.inner.stats.total_created.load(Ordering::Relaxed),
             total_reused: self.inner.stats.total_reused.load(Ordering::Relaxed),
-            pooled_connections: pooled,
+            pooled_connections: self.inner.stats.pooled.load(Ordering::Relaxed),
             active_connections: self.inner.stats.active.load(Ordering::Relaxed),
             timeouts: self.inner.stats.timeouts.load(Ordering::Relaxed),
             discarded: self.inner.stats.discarded.load(Ordering::Relaxed),
@@ -319,8 +332,9 @@ impl ConnectionPool {
     /// Clear all pooled connections.
     pub async fn clear(&self) {
         let mut connections = self.inner.connections.lock().await;
-        let total: usize = connections.values().map(|v| v.len()).sum();
+        let total: usize = connections.values().map(std::vec::Vec::len).sum();
         connections.clear();
+        self.inner.stats.pooled.store(0, Ordering::Relaxed);
 
         debug!(cleared = total, "Cleared connection pool");
     }
@@ -389,7 +403,7 @@ mod tests {
         let conn = pool.get(backend).await.unwrap();
         assert!(conn.stream.is_some());
 
-        let stats = pool.stats().await;
+        let stats = pool.stats();
         assert_eq!(stats.total_created, 1);
         assert_eq!(stats.active_connections, 1);
     }
@@ -410,7 +424,7 @@ mod tests {
         // Get another connection - should reuse
         let _conn = pool.get(backend).await.unwrap();
 
-        let stats = pool.stats().await;
+        let stats = pool.stats();
         // May be 1 or 2 depending on timing
         assert!(stats.total_created >= 1);
     }
@@ -429,7 +443,7 @@ mod tests {
 
         pool.clear().await;
 
-        let stats = pool.stats().await;
+        let stats = pool.stats();
         assert_eq!(stats.pooled_connections, 0);
     }
 }

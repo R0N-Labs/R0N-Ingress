@@ -1,4 +1,4 @@
-//! ACME handler implementing ModuleContract
+//! ACME handler implementing `ModuleContract`
 
 use super::client::{AcmeClient, ClientState};
 use super::config::AcmeConfig;
@@ -109,7 +109,7 @@ impl CertificateInfo {
     }
 }
 
-/// ACME handler implementing ModuleContract
+/// ACME handler implementing `ModuleContract`
 #[allow(dead_code)]
 pub struct AcmeHandler {
     /// Configuration
@@ -144,17 +144,19 @@ impl std::fmt::Debug for AcmeHandler {
             .field("status", &self.status)
             .field("stats", &self.stats)
             .field("started_at", &self.started_at)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
 impl AcmeHandler {
     /// Create a new ACME handler
+    #[must_use]
     pub fn new() -> Self {
         Self::with_config(AcmeConfig::default())
     }
 
     /// Create an ACME handler with custom configuration
+    #[must_use]
     pub fn with_config(config: AcmeConfig) -> Self {
         Self {
             config,
@@ -169,16 +171,22 @@ impl AcmeHandler {
     }
 
     /// Get the ACME client
+    #[must_use]
     pub fn client(&self) -> Option<&Arc<RwLock<AcmeClient>>> {
         self.client.as_ref()
     }
 
     /// Get statistics
+    #[must_use]
     pub fn stats(&self) -> &AcmeStats {
         &self.stats
     }
 
     /// Request a certificate for domains
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is not initialized or certificate issuance fails.
     pub async fn request_certificate(&self, domains: &[&str]) -> AcmeResult<Certificate> {
         let client = self
             .client
@@ -197,6 +205,10 @@ impl AcmeHandler {
     }
 
     /// Get certificate for a domain
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is not initialized or lookup fails.
     pub async fn get_certificate(&self, domain: &str) -> AcmeResult<Option<Certificate>> {
         let client = self
             .client
@@ -208,6 +220,10 @@ impl AcmeHandler {
     }
 
     /// List all certificates
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is not initialized or listing fails.
     pub async fn list_certificates(&self) -> AcmeResult<Vec<String>> {
         let client = self
             .client
@@ -219,6 +235,10 @@ impl AcmeHandler {
     }
 
     /// Get certificate info for all managed certificates
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is not initialized or certificate lookup fails.
     pub async fn certificate_info(&self) -> AcmeResult<Vec<CertificateInfo>> {
         let client = self
             .client
@@ -242,6 +262,10 @@ impl AcmeHandler {
     }
 
     /// Force renewal check
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is not initialized or renewal check fails.
     pub async fn check_renewals(&self) -> AcmeResult<Vec<String>> {
         let client = self
             .client
@@ -260,14 +284,14 @@ impl AcmeHandler {
     }
 
     /// Handle HTTP-01 challenge request
+    #[must_use]
     pub fn handle_challenge_request(&self, path: &str) -> Option<String> {
         let client = self.client.as_ref()?;
 
         // This is synchronous for HTTP handler compatibility
         // Use try_read to avoid blocking
-        let client_guard = match client.try_read() {
-            Ok(guard) => guard,
-            Err(_) => return None,
+        let Ok(client_guard) = client.try_read() else {
+            return None;
         };
 
         client_guard.http01_responder().handle_request(path)
@@ -281,12 +305,9 @@ impl AcmeHandler {
         }
 
         // Only start the task if we're in a tokio runtime
-        let handle = match tokio::runtime::Handle::try_current() {
-            Ok(h) => h,
-            Err(_) => {
-                debug!("No tokio runtime available, skipping renewal task");
-                return;
-            },
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            debug!("No tokio runtime available, skipping renewal task");
+            return;
         };
 
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
@@ -407,14 +428,13 @@ impl ModuleContract for AcmeHandler {
         // Validate configuration
         if let Err(e) = self.config.validate() {
             return Err(ModuleError::ConfigError(format!(
-                "Invalid ACME config: {}",
-                e
+                "Invalid ACME config: {e}"
             )));
         }
 
         // Create the ACME client
         let client = AcmeClient::new(self.config.clone())
-            .map_err(|e| ModuleError::Internal(format!("Failed to create ACME client: {}", e)))?;
+            .map_err(|e| ModuleError::Internal(format!("Failed to create ACME client: {e}")))?;
 
         self.client = Some(Arc::new(RwLock::new(client)));
 
@@ -467,6 +487,7 @@ impl ModuleContract for AcmeHandler {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 

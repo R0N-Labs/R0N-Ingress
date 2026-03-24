@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Main logging configuration
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingConfig {
     /// Whether logging is enabled
@@ -35,7 +36,7 @@ pub struct LoggingConfig {
     #[serde(default = "default_timestamp_format")]
     pub timestamp_format: String,
 
-    /// Include source location (file:line)
+    /// Include source location (<file:line>)
     #[serde(default)]
     pub include_location: bool,
 
@@ -97,41 +98,51 @@ impl Default for LoggingConfig {
 
 impl LoggingConfig {
     /// Create a new default configuration
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Builder: set log level
+    #[must_use]
     pub fn with_level(mut self, level: LogLevel) -> Self {
         self.level = level;
         self
     }
 
     /// Builder: set format
+    #[must_use]
     pub fn with_format(mut self, format: LogFormat) -> Self {
         self.format = format;
         self
     }
 
     /// Builder: add output
+    #[must_use]
     pub fn with_output(mut self, output: OutputConfig) -> Self {
         self.outputs.push(output);
         self
     }
 
     /// Builder: set redaction config
+    #[must_use]
     pub fn with_redaction(mut self, redaction: RedactionConfig) -> Self {
         self.redaction = redaction;
         self
     }
 
     /// Builder: add context field
+    #[must_use]
     pub fn with_context(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.context.insert(key.into(), value.into());
         self
     }
 
     /// Validate the configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any output configuration is invalid.
     pub fn validate(&self) -> LogResult<()> {
         for output in &self.outputs {
             output.validate()?;
@@ -162,6 +173,7 @@ pub enum LogLevel {
 
 impl LogLevel {
     /// Convert to string representation
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Trace => "TRACE",
@@ -173,6 +185,7 @@ impl LogLevel {
     }
 
     /// Parse from string
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "trace" => Some(Self::Trace),
@@ -185,6 +198,7 @@ impl LogLevel {
     }
 
     /// Check if this level should be logged given a minimum level
+    #[must_use]
     pub fn should_log(&self, min_level: LogLevel) -> bool {
         *self >= min_level
     }
@@ -207,6 +221,7 @@ pub enum LogFormat {
 
 impl LogFormat {
     /// Convert to string
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Json => "json",
@@ -261,6 +276,7 @@ impl Default for OutputConfig {
 
 impl OutputConfig {
     /// Create stdout output
+    #[must_use]
     pub fn stdout() -> Self {
         Self {
             output_type: OutputType::Stdout,
@@ -269,6 +285,7 @@ impl OutputConfig {
     }
 
     /// Create stderr output
+    #[must_use]
     pub fn stderr() -> Self {
         Self {
             output_type: OutputType::Stderr,
@@ -287,24 +304,31 @@ impl OutputConfig {
     }
 
     /// Builder: set level filter
+    #[must_use]
     pub fn with_level(mut self, level: LogLevel) -> Self {
         self.level = Some(level);
         self
     }
 
     /// Builder: set format
+    #[must_use]
     pub fn with_format(mut self, format: LogFormat) -> Self {
         self.format = Some(format);
         self
     }
 
     /// Builder: set rotation
+    #[must_use]
     pub fn with_rotation(mut self, rotation: RotationConfig) -> Self {
         self.rotation = Some(rotation);
         self
     }
 
     /// Validate the output configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a file output is missing its path.
     pub fn validate(&self) -> LogResult<()> {
         if self.output_type == OutputType::File && self.path.is_none() {
             return Err(LogError::Config("file output requires path".to_string()));
@@ -385,6 +409,7 @@ impl Default for RotationConfig {
 
 impl RotationConfig {
     /// Create size-based rotation
+    #[must_use]
     pub fn by_size(max_bytes: u64) -> Self {
         Self {
             strategy: RotationStrategy::Size,
@@ -394,6 +419,7 @@ impl RotationConfig {
     }
 
     /// Create daily rotation
+    #[must_use]
     pub fn daily() -> Self {
         Self {
             strategy: RotationStrategy::Daily,
@@ -402,6 +428,7 @@ impl RotationConfig {
     }
 
     /// Create hourly rotation
+    #[must_use]
     pub fn hourly() -> Self {
         Self {
             strategy: RotationStrategy::Hourly,
@@ -410,12 +437,14 @@ impl RotationConfig {
     }
 
     /// Builder: set max backups
+    #[must_use]
     pub fn with_max_backups(mut self, count: u32) -> Self {
         self.max_backups = count;
         self
     }
 
     /// Builder: enable compression
+    #[must_use]
     pub fn with_compression(mut self) -> Self {
         self.compress = true;
         self
@@ -522,6 +551,7 @@ impl Default for RedactionConfig {
 
 impl RedactionConfig {
     /// Create with no redaction
+    #[must_use]
     pub fn none() -> Self {
         Self {
             enabled: false,
@@ -534,23 +564,27 @@ impl RedactionConfig {
     }
 
     /// Create with default sensitive fields
+    #[must_use]
     pub fn standard() -> Self {
         Self::default()
     }
 
     /// Builder: add field to redact
+    #[must_use]
     pub fn with_field(mut self, field: impl Into<String>) -> Self {
         self.fields.push(field.into());
         self
     }
 
     /// Builder: add pattern to redact
+    #[must_use]
     pub fn with_pattern(mut self, pattern: impl Into<String>) -> Self {
         self.patterns.push(pattern.into());
         self
     }
 
     /// Builder: set replacement string
+    #[must_use]
     pub fn with_replacement(mut self, replacement: impl Into<String>) -> Self {
         self.replacement = replacement.into();
         self

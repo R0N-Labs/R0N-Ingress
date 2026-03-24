@@ -73,7 +73,7 @@ struct RoundRobinState {
 }
 
 impl RoundRobinState {
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::cast_possible_truncation)]
     fn next(&self, route_name: &str, backend_count: usize) -> usize {
         let counter = self
             .counters
@@ -154,6 +154,7 @@ impl TcpRouter {
     }
 
     /// Get router statistics.
+    #[inline]
     #[must_use]
     pub fn stats(&self) -> RouterStats {
         RouterStats {
@@ -163,7 +164,7 @@ impl TcpRouter {
             bytes_sent: self.stats.bytes_sent.load(Ordering::Relaxed),
             backend_connections: self.stats.backend_connections.load(Ordering::Relaxed),
             routing_errors: self.stats.routing_errors.load(Ordering::Relaxed),
-            uptime_seconds: self.started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0),
+            uptime_seconds: self.started_at.map_or(0, |t| t.elapsed().as_secs()),
         }
     }
 
@@ -193,7 +194,7 @@ impl TcpRouter {
     }
 
     /// Select a backend from a route using the configured load balancing strategy.
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::cast_possible_truncation)]
     async fn select_backend<'a>(&self, route: &'a RouteConfig) -> Option<&'a BackendConfig> {
         if route.backends.is_empty() {
             return None;
@@ -207,10 +208,7 @@ impl TcpRouter {
             .backends
             .iter()
             .filter(|b| {
-                health
-                    .get(&b.socket_addr())
-                    .map(|h| h.healthy)
-                    .unwrap_or(true) // Assume healthy if not tracked
+                health.get(&b.socket_addr()).map_or(true, |h| h.healthy) // Assume healthy if not tracked
             })
             .collect();
 
@@ -250,6 +248,7 @@ impl TcpRouter {
     }
 
     /// Handle a new connection.
+    #[allow(clippy::large_futures)]
     async fn handle_connection(
         conn: Connection,
         route: RouteConfig,
@@ -271,6 +270,7 @@ impl TcpRouter {
 
         stats.active_connections.fetch_sub(1, Ordering::Relaxed);
 
+        #[allow(clippy::large_futures)]
         match result {
             Ok((bytes_in, bytes_out)) => {
                 stats.bytes_received.fetch_add(bytes_in, Ordering::Relaxed);
@@ -534,6 +534,7 @@ impl ModuleContract for TcpRouter {
                                         let health = Arc::clone(&health);
 
                                         tokio::spawn(async move {
+                                            #[allow(clippy::large_futures)]
                                             TcpRouter::handle_connection(
                                                 conn, route, backend, pool, stats, health,
                                             )
@@ -623,6 +624,7 @@ impl ModuleContract for TcpRouter {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut metrics = MetricsPayload::new();
 
@@ -649,7 +651,7 @@ impl ModuleContract for TcpRouter {
         );
         metrics.gauge(
             "uptime_seconds",
-            self.started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0) as f64,
+            self.started_at.map_or(0, |t| t.elapsed().as_secs()) as f64,
         );
 
         metrics

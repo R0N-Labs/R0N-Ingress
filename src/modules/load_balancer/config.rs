@@ -196,7 +196,7 @@ fn default_enabled() -> bool {
 
 #[allow(dead_code)]
 fn default_bind_address() -> IpAddr {
-    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+    IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 }
 
 #[cfg(test)]

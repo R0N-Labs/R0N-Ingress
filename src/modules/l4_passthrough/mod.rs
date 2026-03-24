@@ -14,7 +14,7 @@
 //!
 //! ## Use Cases
 //!
-//! - Database proxying (MySQL, PostgreSQL, Redis)
+//! - Database proxying (`MySQL`, `PostgreSQL`, Redis)
 //! - Game server proxying
 //! - Custom protocol proxying
 //! - Legacy application support

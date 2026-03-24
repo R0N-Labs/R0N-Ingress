@@ -46,7 +46,7 @@ pub struct ListenerConfig {
 }
 
 fn default_bind_address() -> IpAddr {
-    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+    IpAddr::V4(Ipv4Addr::UNSPECIFIED)
 }
 
 impl ListenerConfig {
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn test_listener_config() {
         let listener = ListenerConfig::new(443)
-            .with_address(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+            .with_address(IpAddr::V4(Ipv4Addr::LOCALHOST))
             .with_name("https");
 
         assert_eq!(listener.port, 443);

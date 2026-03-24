@@ -46,17 +46,17 @@ pub enum LogError {
 impl fmt::Display for LogError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Config(msg) => write!(f, "configuration error: {}", msg),
-            Self::Io(err) => write!(f, "IO error: {}", err),
-            Self::Serialization(msg) => write!(f, "serialization error: {}", msg),
-            Self::Rotation(msg) => write!(f, "rotation error: {}", msg),
-            Self::Output(msg) => write!(f, "output error: {}", msg),
+            Self::Config(msg) => write!(f, "configuration error: {msg}"),
+            Self::Io(err) => write!(f, "IO error: {err}"),
+            Self::Serialization(msg) => write!(f, "serialization error: {msg}"),
+            Self::Rotation(msg) => write!(f, "rotation error: {msg}"),
+            Self::Output(msg) => write!(f, "output error: {msg}"),
             Self::BufferFull => write!(f, "log buffer full"),
             Self::ChannelClosed => write!(f, "log channel closed"),
-            Self::InvalidFormat(msg) => write!(f, "invalid format: {}", msg),
-            Self::PathError(msg) => write!(f, "path error: {}", msg),
-            Self::PermissionDenied(msg) => write!(f, "permission denied: {}", msg),
-            Self::Internal(msg) => write!(f, "internal error: {}", msg),
+            Self::InvalidFormat(msg) => write!(f, "invalid format: {msg}"),
+            Self::PathError(msg) => write!(f, "path error: {msg}"),
+            Self::PermissionDenied(msg) => write!(f, "permission denied: {msg}"),
+            Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
 }

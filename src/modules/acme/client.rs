@@ -95,6 +95,10 @@ pub struct AcmeClient {
 
 impl AcmeClient {
     /// Create a new ACME client
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend cannot be initialized.
     pub fn new(config: AcmeConfig) -> AcmeResult<Self> {
         // Create storage based on config
         let storage: Arc<dyn CertificateStorage> = match config.storage.storage_type {
@@ -132,34 +136,41 @@ impl AcmeClient {
     }
 
     /// Get the current state
+    #[must_use]
     pub fn state(&self) -> ClientState {
         self.state
     }
 
     /// Check if client is ready
+    #[must_use]
     pub fn is_ready(&self) -> bool {
         self.state == ClientState::Ready
     }
 
     /// Get the HTTP-01 responder
+    #[must_use]
     pub fn http01_responder(&self) -> &Http01Responder {
         &self.http01_responder
     }
 
     /// Initialize the client by fetching directory
-    pub async fn initialize(&mut self) -> AcmeResult<()> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if directory fetching or account registration fails.
+    pub fn initialize(&mut self) -> AcmeResult<()> {
         info!(
             "Initializing ACME client with directory: {}",
             self.config.directory_url
         );
 
         // Fetch directory
-        self.directory = Some(self.fetch_directory().await?);
+        self.directory = Some(self.fetch_directory());
         self.state = ClientState::DirectoryFetched;
         debug!("Directory fetched successfully");
 
         // Register or load account
-        self.ensure_account().await?;
+        self.ensure_account()?;
         self.state = ClientState::AccountRegistered;
         debug!("Account ready");
 
@@ -170,14 +181,14 @@ impl AcmeClient {
     }
 
     /// Fetch ACME directory
-    async fn fetch_directory(&self) -> AcmeResult<Directory> {
+    fn fetch_directory(&self) -> Directory {
         // In production, make HTTP request to directory URL
         // For now, return mock directory
         debug!("Fetching ACME directory from {}", self.config.directory_url);
 
         // Simulate network request
         if self.config.directory_url.contains("letsencrypt") {
-            Ok(Directory {
+            Directory {
                 new_nonce: format!(
                     "{}/acme/new-nonce",
                     self.config.directory_url.replace("/directory", "")
@@ -203,17 +214,17 @@ impl AcmeClient {
                         .to_string(),
                 ),
                 website: Some("https://letsencrypt.org".to_string()),
-            })
+            }
         } else {
-            Ok(Directory::mock())
+            Directory::mock()
         }
     }
 
     /// Ensure account exists (register or load)
-    async fn ensure_account(&mut self) -> AcmeResult<()> {
+    fn ensure_account(&mut self) -> AcmeResult<()> {
         // For memory storage, always register a new account
         if self.config.storage.storage_type == super::config::StorageType::Memory {
-            return self.register_account().await;
+            return self.register_account();
         }
 
         // Try to load existing account from file storage
@@ -232,11 +243,11 @@ impl AcmeClient {
         }
 
         // Register new account
-        self.register_account().await
+        self.register_account()
     }
 
     /// Register a new account
-    async fn register_account(&mut self) -> AcmeResult<()> {
+    fn register_account(&mut self) -> AcmeResult<()> {
         info!("Registering new ACME account");
 
         // Generate new key pair
@@ -260,7 +271,7 @@ impl AcmeClient {
             .config
             .contact_emails
             .iter()
-            .map(|e| format!("mailto:{}", e))
+            .map(|e| format!("mailto:{e}"))
             .collect();
         account.tos_agreed = self.config.accept_tos;
 
@@ -278,12 +289,16 @@ impl AcmeClient {
     }
 
     /// Create a new order for certificates
-    pub async fn create_order(&mut self, domains: &[&str]) -> AcmeResult<Order> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is not initialized or order creation fails.
+    pub fn create_order(&mut self, domains: &[&str]) -> AcmeResult<Order> {
         if !self.is_ready() {
             return Err(AcmeError::Account("Client not initialized".to_string()));
         }
 
-        let builder = OrderBuilder::new().domains(domains.iter().map(|s| s.to_string()));
+        let builder = OrderBuilder::new().domains(domains.iter().map(|s| (*s).to_string()));
         builder.validate()?;
 
         info!("Creating order for domains: {:?}", domains);
@@ -295,14 +310,14 @@ impl AcmeClient {
         // For now, simulate order creation
         let order_id = generate_id();
         let order = Order::new(
-            format!("https://acme.example.com/order/{}", order_id),
+            format!("https://acme.example.com/order/{order_id}"),
             identifiers,
             domains
                 .iter()
                 .enumerate()
-                .map(|(i, _)| format!("https://acme.example.com/authz/{}-{}", order_id, i))
+                .map(|(i, _)| format!("https://acme.example.com/authz/{order_id}-{i}"))
                 .collect(),
-            format!("https://acme.example.com/finalize/{}", order_id),
+            format!("https://acme.example.com/finalize/{order_id}"),
         );
 
         self.pending_orders.insert(order_id.clone(), order.clone());
@@ -312,7 +327,11 @@ impl AcmeClient {
     }
 
     /// Get authorizations for an order
-    pub async fn get_authorizations(&self, order: &Order) -> AcmeResult<Vec<Authorization>> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if fetching authorizations fails.
+    pub fn get_authorizations(&self, order: &Order) -> AcmeResult<Vec<Authorization>> {
         let mut authorizations = Vec::new();
 
         for (i, authz_url) in order.authorizations.iter().enumerate() {
@@ -326,13 +345,13 @@ impl AcmeClient {
             let challenges = vec![
                 Challenge::new(
                     ChallengeType::Http01,
-                    format!("{}/http01", authz_url),
+                    format!("{authz_url}/http01"),
                     generate_id(),
                     domain.clone(),
                 ),
                 Challenge::new(
                     ChallengeType::Dns01,
-                    format!("{}/dns01", authz_url),
+                    format!("{authz_url}/dns01"),
                     generate_id(),
                     domain.clone(),
                 ),
@@ -347,6 +366,10 @@ impl AcmeClient {
     }
 
     /// Prepare HTTP-01 challenge
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the challenge cannot be prepared.
     pub fn prepare_http01_challenge(&self, authz: &Authorization) -> AcmeResult<Http01Challenge> {
         let challenge = authz
             .http01_challenge()
@@ -371,7 +394,11 @@ impl AcmeClient {
     }
 
     /// Respond to a challenge
-    pub async fn respond_to_challenge(&self, challenge: &Challenge) -> AcmeResult<()> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the challenge response fails.
+    pub fn respond_to_challenge(&self, challenge: &Challenge) -> AcmeResult<()> {
         info!(
             "Responding to {} challenge for {}",
             challenge.challenge_type.as_str(),
@@ -384,7 +411,11 @@ impl AcmeClient {
     }
 
     /// Poll challenge status
-    pub async fn poll_challenge(&self, challenge: &Challenge) -> AcmeResult<ChallengeStatus> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if polling fails.
+    pub fn poll_challenge(&self, challenge: &Challenge) -> AcmeResult<ChallengeStatus> {
         debug!("Polling challenge status for {}", challenge.domain);
 
         // In production, GET challenge URL
@@ -393,6 +424,10 @@ impl AcmeClient {
     }
 
     /// Wait for challenge to complete
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the challenge times out or fails.
     pub async fn wait_for_challenge(
         &self,
         challenge: &Challenge,
@@ -401,7 +436,7 @@ impl AcmeClient {
         let start = std::time::Instant::now();
 
         while start.elapsed() < timeout {
-            let status = self.poll_challenge(challenge).await?;
+            let status = self.poll_challenge(challenge)?;
 
             match status {
                 ChallengeStatus::Valid => {
@@ -424,6 +459,10 @@ impl AcmeClient {
     }
 
     /// Finalize order and get certificate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the order is not ready or finalization fails.
     pub async fn finalize_order(&mut self, order: &mut Order) -> AcmeResult<Certificate> {
         if order.status != OrderStatus::Ready {
             return Err(AcmeError::Order(format!(
@@ -435,7 +474,7 @@ impl AcmeClient {
         info!("Finalizing order for {:?}", order.domains());
 
         // Generate CSR
-        let _csr = self.generate_csr(&order.domains())?;
+        let _csr = Self::generate_csr(&order.domains());
 
         // In production, POST CSR to finalize URL
         // Simulate finalization
@@ -447,7 +486,7 @@ impl AcmeClient {
         order.certificate = Some(format!("{}/cert", order.url));
 
         // Download certificate
-        let cert = self.download_certificate(order).await?;
+        let cert = Self::download_certificate(order)?;
 
         // Store certificate
         self.storage.store(&cert)?;
@@ -457,16 +496,16 @@ impl AcmeClient {
     }
 
     /// Generate CSR for domains
-    fn generate_csr(&self, domains: &[&str]) -> AcmeResult<Vec<u8>> {
+    fn generate_csr(domains: &[&str]) -> Vec<u8> {
         debug!("Generating CSR for {:?}", domains);
 
         // In production, use rcgen or openssl to generate CSR
         // For now, return placeholder
-        Ok(format!("CSR for {:?}", domains).into_bytes())
+        format!("CSR for {domains:?}").into_bytes()
     }
 
     /// Download certificate from order
-    async fn download_certificate(&self, order: &Order) -> AcmeResult<Certificate> {
+    fn download_certificate(order: &Order) -> AcmeResult<Certificate> {
         let cert_url = order
             .certificate
             .as_ref()
@@ -482,7 +521,11 @@ impl AcmeClient {
             .as_secs();
 
         Ok(Certificate::new(
-            order.domains().into_iter().map(|s| s.to_string()).collect(),
+            order
+                .domains()
+                .into_iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             "-----BEGIN CERTIFICATE-----\n(certificate data)\n-----END CERTIFICATE-----"
                 .to_string(),
             "-----BEGIN PRIVATE KEY-----\n(private key data)\n-----END PRIVATE KEY-----"
@@ -493,6 +536,10 @@ impl AcmeClient {
     }
 
     /// Obtain certificate for domains (full flow)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any step of the certificate issuance process fails.
     pub async fn obtain_certificate(&mut self, domains: &[&str]) -> AcmeResult<Certificate> {
         // Check if we already have a valid certificate
         if let Some(cert) = self.storage.find_for_domain(domains[0])? {
@@ -504,17 +551,17 @@ impl AcmeClient {
         }
 
         // Create order
-        let mut order = self.create_order(domains).await?;
+        let mut order = self.create_order(domains)?;
 
         // Get authorizations
-        let authorizations = self.get_authorizations(&order).await?;
+        let authorizations = self.get_authorizations(&order)?;
 
         // Complete challenges
         for authz in &authorizations {
             let challenge = match self.config.preferred_challenge {
-                super::config::ChallengePreference::Http01 => authz.http01_challenge(),
+                super::config::ChallengePreference::Http01
+                | super::config::ChallengePreference::TlsAlpn01 => authz.http01_challenge(),
                 super::config::ChallengePreference::Dns01 => authz.dns01_challenge(),
-                super::config::ChallengePreference::TlsAlpn01 => authz.http01_challenge(), // fallback
             };
 
             let challenge = challenge.ok_or_else(|| AcmeError::Challenge {
@@ -527,7 +574,7 @@ impl AcmeClient {
                 self.prepare_http01_challenge(authz)?;
             }
 
-            self.respond_to_challenge(challenge).await?;
+            self.respond_to_challenge(challenge)?;
             self.wait_for_challenge(challenge, self.config.timeout())
                 .await?;
         }
@@ -540,6 +587,10 @@ impl AcmeClient {
     }
 
     /// Check and renew certificates that need renewal
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if listing or renewing certificates fails.
     pub async fn check_renewals(&mut self) -> AcmeResult<Vec<String>> {
         if !self.config.renewal.enabled {
             return Ok(Vec::new());
@@ -555,7 +606,11 @@ impl AcmeClient {
 
                     match self
                         .obtain_certificate(
-                            &cert.domains.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                            &cert
+                                .domains
+                                .iter()
+                                .map(std::string::String::as_str)
+                                .collect::<Vec<_>>(),
                         )
                         .await
                     {
@@ -574,11 +629,19 @@ impl AcmeClient {
     }
 
     /// Get a certificate for a domain
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage lookup fails.
     pub fn get_certificate(&self, domain: &str) -> AcmeResult<Option<Certificate>> {
         self.storage.find_for_domain(domain)
     }
 
     /// List all certificates
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage listing fails.
     pub fn list_certificates(&self) -> AcmeResult<Vec<String>> {
         self.storage.list()
     }
@@ -593,7 +656,7 @@ fn generate_id() -> String {
         .unwrap()
         .as_nanos();
 
-    format!("{:x}", now)
+    format!("{now:x}")
 }
 
 #[cfg(test)]
@@ -631,38 +694,37 @@ mod tests {
         assert!(!dir.new_order.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_client_initialize() {
+    #[test]
+    fn test_client_initialize() {
         let config = create_test_config();
         let mut client = AcmeClient::new(config).unwrap();
 
-        client.initialize().await.unwrap();
+        client.initialize().unwrap();
         assert!(client.is_ready());
         assert_eq!(client.state(), ClientState::Ready);
     }
 
-    #[tokio::test]
-    async fn test_create_order() {
+    #[test]
+    fn test_create_order() {
         let config = create_test_config();
         let mut client = AcmeClient::new(config).unwrap();
-        client.initialize().await.unwrap();
+        client.initialize().unwrap();
 
         let order = client
             .create_order(&["example.com", "www.example.com"])
-            .await
             .unwrap();
         assert!(order.is_pending());
         assert_eq!(order.identifiers.len(), 2);
     }
 
-    #[tokio::test]
-    async fn test_get_authorizations() {
+    #[test]
+    fn test_get_authorizations() {
         let config = create_test_config();
         let mut client = AcmeClient::new(config).unwrap();
-        client.initialize().await.unwrap();
+        client.initialize().unwrap();
 
-        let order = client.create_order(&["example.com"]).await.unwrap();
-        let authz = client.get_authorizations(&order).await.unwrap();
+        let order = client.create_order(&["example.com"]).unwrap();
+        let authz = client.get_authorizations(&order).unwrap();
 
         assert_eq!(authz.len(), 1);
         assert!(authz[0].http01_challenge().is_some());
@@ -673,7 +735,7 @@ mod tests {
     async fn test_obtain_certificate() {
         let config = create_test_config();
         let mut client = AcmeClient::new(config).unwrap();
-        client.initialize().await.unwrap();
+        client.initialize().unwrap();
 
         let cert = client.obtain_certificate(&["example.com"]).await.unwrap();
         assert_eq!(cert.primary_domain(), "example.com");
@@ -684,7 +746,7 @@ mod tests {
     async fn test_certificate_caching() {
         let config = create_test_config();
         let mut client = AcmeClient::new(config).unwrap();
-        client.initialize().await.unwrap();
+        client.initialize().unwrap();
 
         // First request obtains certificate
         let cert1 = client.obtain_certificate(&["example.com"]).await.unwrap();

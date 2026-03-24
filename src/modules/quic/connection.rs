@@ -18,11 +18,16 @@ impl ConnectionId {
     pub const MAX_LENGTH: usize = 20;
 
     /// Create empty connection ID
+    #[must_use]
     pub fn empty() -> Self {
         Self(Vec::new())
     }
 
     /// Create from bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the byte slice exceeds the maximum connection ID length.
     pub fn from_bytes(bytes: &[u8]) -> QuicResult<Self> {
         if bytes.len() > Self::MAX_LENGTH {
             return Err(QuicError::Protocol(format!(
@@ -35,7 +40,15 @@ impl ConnectionId {
     }
 
     /// Generate random connection ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the requested length exceeds the maximum connection ID length.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn generate(length: usize) -> QuicResult<Self> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
         if length > Self::MAX_LENGTH {
             return Err(QuicError::Protocol(format!(
                 "connection ID length too long: {} > {}",
@@ -43,9 +56,6 @@ impl ConnectionId {
                 Self::MAX_LENGTH
             )));
         }
-
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
 
         let mut bytes = vec![0u8; length];
         let now = std::time::SystemTime::now()
@@ -64,16 +74,19 @@ impl ConnectionId {
     }
 
     /// Get bytes
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
     /// Get length
+    #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Check if empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -83,7 +96,7 @@ impl std::fmt::Debug for ConnectionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ConnectionId(")?;
         for byte in &self.0 {
-            write!(f, "{:02x}", byte)?;
+            write!(f, "{byte:02x}")?;
         }
         write!(f, ")")
     }
@@ -92,7 +105,7 @@ impl std::fmt::Debug for ConnectionId {
 impl std::fmt::Display for ConnectionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in &self.0 {
-            write!(f, "{:02x}", byte)?;
+            write!(f, "{byte:02x}")?;
         }
         Ok(())
     }
@@ -122,21 +135,25 @@ pub enum ConnectionState {
 
 impl ConnectionState {
     /// Check if connected
+    #[must_use]
     pub fn is_connected(&self) -> bool {
         matches!(self, Self::Connected)
     }
 
     /// Check if closed
+    #[must_use]
     pub fn is_closed(&self) -> bool {
         matches!(self, Self::Closed)
     }
 
     /// Check if can send data
+    #[must_use]
     pub fn can_send(&self) -> bool {
         matches!(self, Self::Connected)
     }
 
     /// Check if can receive data
+    #[must_use]
     pub fn can_receive(&self) -> bool {
         matches!(self, Self::Handshaking | Self::Connected)
     }
@@ -170,6 +187,7 @@ pub struct CloseReason {
 
 impl CloseReason {
     /// No error
+    #[must_use]
     pub fn no_error() -> Self {
         Self {
             error_code: TransportErrorCode::NoError,
@@ -251,11 +269,14 @@ pub struct ConnectionStats {
 
 impl ConnectionStats {
     /// Get connection uptime
+    #[must_use]
     pub fn uptime(&self) -> Option<Duration> {
         self.established_at.map(|t| t.elapsed())
     }
 
     /// Get packet loss rate
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn loss_rate(&self) -> f64 {
         if self.packets_sent == 0 {
             0.0
@@ -283,6 +304,7 @@ pub struct FlowControl {
 
 impl FlowControl {
     /// Create with initial values
+    #[must_use]
     pub fn new(max_data: u64, peer_max_data: u64) -> Self {
         Self {
             max_data,
@@ -293,26 +315,34 @@ impl FlowControl {
     }
 
     /// Available receive window
+    #[must_use]
     pub fn receive_window(&self) -> u64 {
         self.max_data.saturating_sub(self.data_consumed)
     }
 
     /// Available send window
+    #[must_use]
     pub fn send_window(&self) -> u64 {
         self.peer_max_data.saturating_sub(self.data_sent)
     }
 
     /// Check if blocked on receive
+    #[must_use]
     pub fn receive_blocked(&self) -> bool {
         self.data_consumed >= self.max_data
     }
 
     /// Check if blocked on send
+    #[must_use]
     pub fn send_blocked(&self) -> bool {
         self.data_sent >= self.peer_max_data
     }
 
     /// Record data consumed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the consumed amount exceeds the flow control limit.
     pub fn consume(&mut self, amount: u64) -> QuicResult<()> {
         let new_consumed = self.data_consumed.saturating_add(amount);
         if new_consumed > self.max_data {
@@ -326,6 +356,10 @@ impl FlowControl {
     }
 
     /// Record data sent
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sent amount exceeds the peer flow control limit.
     pub fn send(&mut self, amount: u64) -> QuicResult<()> {
         let new_sent = self.data_sent.saturating_add(amount);
         if new_sent > self.peer_max_data {
@@ -338,7 +372,7 @@ impl FlowControl {
         Ok(())
     }
 
-    /// Update max data (from MAX_DATA frame)
+    /// Update max data (from `MAX_DATA` frame)
     pub fn update_max_data(&mut self, max_data: u64) {
         if max_data > self.max_data {
             self.max_data = max_data;
@@ -377,6 +411,7 @@ pub struct StreamLimits {
 
 impl StreamLimits {
     /// Create with initial values
+    #[must_use]
     pub fn new(max_bidi: u64, max_uni: u64) -> Self {
         Self {
             max_bidi_local: max_bidi,
@@ -389,11 +424,13 @@ impl StreamLimits {
     }
 
     /// Check if can open bidirectional stream
+    #[must_use]
     pub fn can_open_bidi(&self) -> bool {
         self.bidi_initiated < self.max_bidi_local
     }
 
     /// Check if can open unidirectional stream
+    #[must_use]
     pub fn can_open_uni(&self) -> bool {
         self.uni_initiated < self.max_uni_local
     }
@@ -461,6 +498,7 @@ pub struct Connection {
 
 impl Connection {
     /// Create new connection
+    #[must_use]
     pub fn new(
         source_cid: ConnectionId,
         destination_cid: ConnectionId,
@@ -504,6 +542,7 @@ impl Connection {
     }
 
     /// Get connection state
+    #[must_use]
     pub fn state(&self) -> ConnectionState {
         self.state
     }
@@ -517,21 +556,25 @@ impl Connection {
     }
 
     /// Get QUIC version
+    #[must_use]
     pub fn version(&self) -> QuicVersion {
         self.version
     }
 
     /// Check if server side
+    #[must_use]
     pub fn is_server(&self) -> bool {
         self.is_server
     }
 
     /// Get local transport parameters
+    #[must_use]
     pub fn local_params(&self) -> &TransportParameters {
         &self.local_params
     }
 
     /// Get peer transport parameters
+    #[must_use]
     pub fn peer_params(&self) -> Option<&TransportParameters> {
         self.peer_params.as_ref()
     }
@@ -542,6 +585,7 @@ impl Connection {
     }
 
     /// Get connection statistics
+    #[must_use]
     pub fn stats(&self) -> &ConnectionStats {
         &self.stats
     }
@@ -552,6 +596,7 @@ impl Connection {
     }
 
     /// Get flow control
+    #[must_use]
     pub fn flow_control(&self) -> &FlowControl {
         &self.flow_control
     }
@@ -562,6 +607,7 @@ impl Connection {
     }
 
     /// Get stream limits
+    #[must_use]
     pub fn stream_limits(&self) -> &StreamLimits {
         &self.stream_limits
     }
@@ -572,16 +618,22 @@ impl Connection {
     }
 
     /// Check if connection has timed out
+    #[must_use]
     pub fn is_timed_out(&self) -> bool {
         self.last_activity.elapsed() > self.idle_timeout
     }
 
     /// Get close reason
+    #[must_use]
     pub fn close_reason(&self) -> Option<&CloseReason> {
         self.close_reason.as_ref()
     }
 
     /// Open a new bidirectional stream
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection is not ready or the stream limit has been reached.
     pub fn open_bidirectional_stream(&mut self) -> QuicResult<StreamId> {
         if !self.state.can_send() {
             return Err(QuicError::ConnectionClosed(
@@ -608,6 +660,10 @@ impl Connection {
     }
 
     /// Open a new unidirectional stream
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection is not ready or the stream limit has been reached.
     pub fn open_unidirectional_stream(&mut self) -> QuicResult<StreamId> {
         if !self.state.can_send() {
             return Err(QuicError::ConnectionClosed(
@@ -634,6 +690,7 @@ impl Connection {
     }
 
     /// Get a stream
+    #[must_use]
     pub fn stream(&self, id: StreamId) -> Option<&Stream> {
         self.streams.get(&id)
     }
@@ -649,11 +706,16 @@ impl Connection {
     }
 
     /// Get number of active streams
+    #[must_use]
     pub fn stream_count(&self) -> usize {
         self.streams.len()
     }
 
     /// Accept a new stream from peer
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream already exists.
     pub fn accept_stream(
         &mut self,
         stream_id: StreamId,
@@ -661,8 +723,7 @@ impl Connection {
     ) -> QuicResult<()> {
         if self.streams.contains_key(&stream_id) {
             return Err(QuicError::Stream(format!(
-                "stream {} already exists",
-                stream_id
+                "stream {stream_id} already exists"
             )));
         }
 
@@ -674,6 +735,10 @@ impl Connection {
     }
 
     /// Close a stream
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stream does not exist.
     pub fn close_stream(&mut self, stream_id: StreamId) -> QuicResult<()> {
         if let Some(_stream) = self.streams.remove(&stream_id) {
             self.stats.streams_closed += 1;
@@ -707,6 +772,7 @@ impl Connection {
     }
 
     /// Get connection age
+    #[must_use]
     pub fn age(&self) -> Duration {
         self.created_at.elapsed()
     }
@@ -722,7 +788,7 @@ impl std::fmt::Debug for Connection {
             .field("version", &self.version)
             .field("is_server", &self.is_server)
             .field("stream_count", &self.streams.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
