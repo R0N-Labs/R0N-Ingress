@@ -44,7 +44,7 @@ impl std::fmt::Debug for CertificateBundle {
             .field("certificates_count", &self.certificates.len())
             .field("sni_names", &self.sni_names)
             .field("hot_reload", &self.hot_reload)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

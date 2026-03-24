@@ -120,7 +120,7 @@ impl BoundSocket {
         self.bound_addr
     }
 
-    /// Get the local address (alias for bound_addr).
+    /// Get the local address (alias for `bound_addr`).
     #[must_use]
     pub fn local_addr(&self) -> SocketAddr {
         self.bound_addr

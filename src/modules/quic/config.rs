@@ -22,7 +22,7 @@ pub struct QuicConfig {
     /// TLS private key path
     pub key_path: Option<PathBuf>,
 
-    /// ALPN protocols (e.g., ["h3", "h3-29"])
+    /// ALPN protocols (e.g., `["h3", "h3-29"]`)
     #[serde(default = "default_alpn")]
     pub alpn_protocols: Vec<String>,
 
@@ -139,6 +139,7 @@ fn default_max_0rtt_data() -> u64 {
     16 * 1024 // 16 KB
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn default_keep_alive() -> Option<Duration> {
     Some(Duration::from_secs(15))
 }
@@ -240,12 +241,13 @@ pub enum CongestionControl {
     /// BBR (Bottleneck Bandwidth and RTT)
     Bbr,
 
-    /// BBRv2
+    /// `BBRv2`
     Bbr2,
 }
 
 impl CongestionControl {
     /// Get algorithm name
+    #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
             Self::NewReno => "new_reno",
@@ -262,33 +264,37 @@ pub struct QuicVersion(u32);
 
 impl QuicVersion {
     /// QUIC v1 (RFC 9000)
-    pub const V1: Self = Self(0x00000001);
+    pub const V1: Self = Self(0x0000_0001);
 
     /// QUIC v2 (RFC 9369)
-    pub const V2: Self = Self(0x6b3343cf);
+    pub const V2: Self = Self(0x6b33_43cf);
 
     /// Version negotiation
-    pub const NEGOTIATION: Self = Self(0x00000000);
+    pub const NEGOTIATION: Self = Self(0x0000_0000);
 
     /// Draft-29 (for testing)
-    pub const DRAFT_29: Self = Self(0xff00001d);
+    pub const DRAFT_29: Self = Self(0xff00_001d);
 
     /// Create from raw value
+    #[must_use]
     pub fn from_u32(value: u32) -> Self {
         Self(value)
     }
 
     /// Get raw value
+    #[must_use]
     pub fn as_u32(&self) -> u32 {
         self.0
     }
 
     /// Check if this is a supported version
+    #[must_use]
     pub fn is_supported(&self) -> bool {
         matches!(*self, Self::V1 | Self::V2 | Self::DRAFT_29)
     }
 
     /// Get list of supported versions
+    #[must_use]
     pub fn supported_versions() -> Vec<Self> {
         vec![Self::V1, Self::V2]
     }
@@ -307,7 +313,7 @@ impl std::fmt::Display for QuicVersion {
             Self::V2 => write!(f, "QUICv2"),
             Self::NEGOTIATION => write!(f, "Negotiation"),
             Self::DRAFT_29 => write!(f, "Draft-29"),
-            Self(v) => write!(f, "0x{:08x}", v),
+            Self(v) => write!(f, "0x{v:08x}"),
         }
     }
 }
@@ -369,17 +375,19 @@ pub struct TransportParameters {
 
 impl TransportParameters {
     /// Create from config
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn from_config(config: &QuicConfig) -> Self {
         Self {
             max_idle_timeout: config.idle_timeout.as_millis() as u64,
-            max_udp_payload_size: config.max_udp_payload_size as u64,
+            max_udp_payload_size: u64::from(config.max_udp_payload_size),
             initial_max_data: config.max_data,
             initial_max_stream_data_bidi_local: config.max_stream_data_bidi_local,
             initial_max_stream_data_bidi_remote: config.max_stream_data_bidi_remote,
             initial_max_stream_data_uni: config.max_stream_data_uni,
             initial_max_streams_bidi: config.max_bidirectional_streams,
             initial_max_streams_uni: config.max_unidirectional_streams,
-            ack_delay_exponent: config.ack_delay_exponent as u64,
+            ack_delay_exponent: u64::from(config.ack_delay_exponent),
             max_ack_delay: config.max_ack_delay.as_millis() as u64,
             disable_active_migration: config.disable_active_migration,
             active_connection_id_limit: config.active_connection_id_limit,
@@ -421,7 +429,7 @@ mod tests {
     fn test_quic_version() {
         assert!(QuicVersion::V1.is_supported());
         assert!(QuicVersion::V2.is_supported());
-        assert!(!QuicVersion::from_u32(0x12345678).is_supported());
+        assert!(!QuicVersion::from_u32(0x1234_5678).is_supported());
 
         assert_eq!(QuicVersion::V1.to_string(), "QUICv1");
     }

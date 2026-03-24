@@ -37,6 +37,7 @@ impl Default for IngressController {
 
 impl IngressController {
     /// Create a new ingress controller.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             ingresses: HashMap::new(),
@@ -57,12 +58,14 @@ impl IngressController {
     }
 
     /// Set the namespace filter.
+    #[must_use]
     pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
         self.namespace_filter = Some(namespace.into());
         self
     }
 
     /// Set the label selector.
+    #[must_use]
     pub fn with_label_selector(mut self, selector: LabelSelector) -> Self {
         self.label_selector = Some(selector);
         self
@@ -77,6 +80,7 @@ impl IngressController {
     }
 
     /// Get an ingress by namespace and name.
+    #[must_use]
     pub fn get_ingress(&self, namespace: &str, name: &str) -> Option<&Ingress> {
         let key = IngressKey::new(namespace, name);
         self.ingresses.get(&key)
@@ -88,11 +92,13 @@ impl IngressController {
     }
 
     /// Get the number of managed ingresses.
+    #[must_use]
     pub fn ingress_count(&self) -> usize {
         self.ingresses.len()
     }
 
     /// Get the total number of rules.
+    #[must_use]
     pub fn rule_count(&self) -> usize {
         self.ingresses.values().map(|i| i.rules.len()).sum()
     }
@@ -117,6 +123,10 @@ impl IngressController {
     }
 
     /// Handle an ingress watch event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watch event contains an error status.
     pub fn handle_event(&mut self, event: WatchEvent<Ingress>) -> K8sResult<()> {
         match event {
             WatchEvent::Added(ingress) | WatchEvent::Modified(ingress) => {
@@ -141,11 +151,12 @@ impl IngressController {
     }
 
     /// Generate routing rules from all ingresses.
+    #[must_use]
     pub fn generate_routes(&self) -> Vec<Route> {
         let mut routes = Vec::new();
 
         for ingress in self.ingresses.values() {
-            routes.extend(self.routes_from_ingress(ingress));
+            routes.extend(Self::routes_from_ingress(ingress));
         }
 
         // Sort routes by priority (most specific first)
@@ -154,7 +165,7 @@ impl IngressController {
     }
 
     /// Generate routes from a single ingress.
-    fn routes_from_ingress(&self, ingress: &Ingress) -> Vec<Route> {
+    fn routes_from_ingress(ingress: &Ingress) -> Vec<Route> {
         let mut routes = Vec::new();
 
         for rule in &ingress.rules {
@@ -165,7 +176,11 @@ impl IngressController {
                     path: path.path.clone(),
                     path_type: path.path_type.clone(),
                     backend: path.backend.clone(),
-                    priority: self.calculate_priority(&rule.host, &path.path, &path.path_type),
+                    priority: Self::calculate_priority(
+                        rule.host.as_ref(),
+                        &path.path,
+                        &path.path_type,
+                    ),
                     tls: ingress
                         .tls
                         .iter()
@@ -194,7 +209,8 @@ impl IngressController {
     }
 
     /// Calculate route priority (higher = more specific).
-    fn calculate_priority(&self, host: &Option<String>, path: &str, path_type: &PathType) -> u32 {
+    #[allow(clippy::cast_possible_truncation)]
+    fn calculate_priority(host: Option<&String>, path: &str, path_type: &PathType) -> u32 {
         let mut priority = 0u32;
 
         // Host specificity
@@ -220,11 +236,12 @@ impl IngressController {
     }
 
     /// Find routes matching a host and path.
+    #[must_use]
     pub fn find_routes(&self, host: Option<&str>, path: &str) -> Vec<&Route> {
         let routes = self.generate_routes();
         let matching: Vec<Route> = routes
             .into_iter()
-            .filter(|r| self.route_matches(r, host, path))
+            .filter(|r| Self::route_matches(r, host, path))
             .collect();
 
         // This is a workaround since we can't return references to local data
@@ -234,7 +251,7 @@ impl IngressController {
     }
 
     /// Check if a route matches the given host and path.
-    fn route_matches(&self, route: &Route, host: Option<&str>, path: &str) -> bool {
+    fn route_matches(route: &Route, host: Option<&str>, path: &str) -> bool {
         // Check host
         match (&route.host, host) {
             (Some(route_host), Some(req_host)) => {
@@ -264,6 +281,7 @@ impl IngressController {
     }
 
     /// Get backends for a specific service.
+    #[must_use]
     pub fn backends_for_service(&self, namespace: &str, name: &str) -> Vec<&IngressBackend> {
         self.ingresses
             .values()
@@ -344,36 +362,42 @@ impl Ingress {
     }
 
     /// Set the ingress class.
+    #[must_use]
     pub fn with_class(mut self, class: impl Into<String>) -> Self {
         self.ingress_class = Some(class.into());
         self
     }
 
     /// Set the default backend.
+    #[must_use]
     pub fn with_default_backend(mut self, backend: IngressBackend) -> Self {
         self.default_backend = Some(backend);
         self
     }
 
     /// Add a rule.
+    #[must_use]
     pub fn with_rule(mut self, rule: IngressRule) -> Self {
         self.rules.push(rule);
         self
     }
 
     /// Add TLS configuration.
+    #[must_use]
     pub fn with_tls(mut self, tls: IngressTLS) -> Self {
         self.tls.push(tls);
         self
     }
 
     /// Add an annotation.
+    #[must_use]
     pub fn with_annotation(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.annotations.insert(key.into(), value.into());
         self
     }
 
     /// Get all hosts from rules.
+    #[must_use]
     pub fn hosts(&self) -> Vec<&str> {
         self.rules
             .iter()
@@ -382,6 +406,7 @@ impl Ingress {
     }
 
     /// Check if this ingress has TLS for a host.
+    #[must_use]
     pub fn has_tls_for_host(&self, host: &str) -> bool {
         self.tls.iter().any(|t| t.hosts.iter().any(|h| h == host))
     }
@@ -406,6 +431,7 @@ impl IngressRule {
     }
 
     /// Create a rule matching all hosts.
+    #[must_use]
     pub fn any_host() -> Self {
         Self {
             host: None,
@@ -414,6 +440,7 @@ impl IngressRule {
     }
 
     /// Add a path.
+    #[must_use]
     pub fn with_path(mut self, path: IngressPath) -> Self {
         self.paths.push(path);
         self
@@ -442,6 +469,7 @@ impl IngressPath {
     }
 
     /// Set the path type.
+    #[must_use]
     pub fn with_type(mut self, path_type: PathType) -> Self {
         self.path_type = path_type;
         self
@@ -499,6 +527,7 @@ impl IngressBackend {
     }
 
     /// Get the service key if this is a service backend.
+    #[must_use]
     pub fn service_key(&self, default_namespace: &str) -> Option<ServiceKey> {
         self.service
             .as_ref()
@@ -528,6 +557,7 @@ pub enum ServiceBackendPort {
 
 impl ServiceBackendPort {
     /// Get the port number if specified numerically.
+    #[must_use]
     pub fn number(&self) -> Option<u16> {
         match self {
             Self::Number(n) => Some(*n),
@@ -536,6 +566,7 @@ impl ServiceBackendPort {
     }
 
     /// Get the port name if specified by name.
+    #[must_use]
     pub fn name(&self) -> Option<&str> {
         match self {
             Self::Number(_) => None,
@@ -566,6 +597,7 @@ pub struct IngressTLS {
 
 impl IngressTLS {
     /// Create TLS config for hosts.
+    #[must_use]
     pub fn for_hosts(hosts: Vec<String>) -> Self {
         Self {
             hosts,
@@ -574,6 +606,7 @@ impl IngressTLS {
     }
 
     /// Set the secret name.
+    #[must_use]
     pub fn with_secret(mut self, secret: impl Into<String>) -> Self {
         self.secret_name = Some(secret.into());
         self
@@ -639,11 +672,13 @@ pub struct Route {
 
 impl Route {
     /// Get an annotation value.
+    #[must_use]
     pub fn annotation(&self, key: &str) -> Option<&str> {
-        self.annotations.get(key).map(|s| s.as_str())
+        self.annotations.get(key).map(std::string::String::as_str)
     }
 
     /// Check if this route requires authentication.
+    #[must_use]
     pub fn requires_auth(&self) -> bool {
         self.annotations
             .contains_key("nginx.ingress.kubernetes.io/auth-url")
@@ -651,6 +686,7 @@ impl Route {
     }
 
     /// Get rate limit if configured.
+    #[must_use]
     pub fn rate_limit(&self) -> Option<u32> {
         self.annotation("r0n.io/rate-limit")
             .or_else(|| self.annotation("nginx.ingress.kubernetes.io/limit-rps"))

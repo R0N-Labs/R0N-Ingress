@@ -13,19 +13,19 @@ pub enum FrameType {
     /// HEADERS frame (0x01)
     Headers,
 
-    /// CANCEL_PUSH frame (0x03) - reserved in HTTP/3
+    /// `CANCEL_PUSH` frame (0x03) - reserved in HTTP/3
     CancelPush,
 
     /// SETTINGS frame (0x04)
     Settings,
 
-    /// PUSH_PROMISE frame (0x05)
+    /// `PUSH_PROMISE` frame (0x05)
     PushPromise,
 
     /// GOAWAY frame (0x07)
     GoAway,
 
-    /// MAX_PUSH_ID frame (0x0d)
+    /// `MAX_PUSH_ID` frame (0x0d)
     MaxPushId,
 
     /// Reserved frame type (0x02, 0x06, 0x08, 0x09)
@@ -37,6 +37,7 @@ pub enum FrameType {
 
 impl FrameType {
     /// Get frame type value
+    #[must_use]
     pub fn value(&self) -> u64 {
         match self {
             Self::Data => 0x00,
@@ -46,12 +47,12 @@ impl FrameType {
             Self::PushPromise => 0x05,
             Self::GoAway => 0x07,
             Self::MaxPushId => 0x0d,
-            Self::Reserved(v) => *v,
-            Self::Unknown(v) => *v,
+            Self::Reserved(v) | Self::Unknown(v) => *v,
         }
     }
 
     /// Create from value
+    #[must_use]
     pub fn from_value(value: u64) -> Self {
         match value {
             0x00 => Self::Data,
@@ -68,11 +69,13 @@ impl FrameType {
     }
 
     /// Check if this frame type is reserved
+    #[must_use]
     pub fn is_reserved(&self) -> bool {
         matches!(self, Self::Reserved(_))
     }
 
     /// Check if frame is allowed on control stream
+    #[must_use]
     pub fn is_control_stream_frame(&self) -> bool {
         matches!(
             self,
@@ -81,6 +84,7 @@ impl FrameType {
     }
 
     /// Check if frame is allowed on request stream
+    #[must_use]
     pub fn is_request_stream_frame(&self) -> bool {
         matches!(self, Self::Data | Self::Headers | Self::PushPromise)
     }
@@ -96,8 +100,8 @@ impl std::fmt::Display for FrameType {
             Self::PushPromise => write!(f, "PUSH_PROMISE"),
             Self::GoAway => write!(f, "GOAWAY"),
             Self::MaxPushId => write!(f, "MAX_PUSH_ID"),
-            Self::Reserved(v) => write!(f, "RESERVED(0x{:x})", v),
-            Self::Unknown(v) => write!(f, "UNKNOWN(0x{:x})", v),
+            Self::Reserved(v) => write!(f, "RESERVED(0x{v:x})"),
+            Self::Unknown(v) => write!(f, "UNKNOWN(0x{v:x})"),
         }
     }
 }
@@ -117,13 +121,13 @@ pub enum Frame {
     /// GOAWAY frame - graceful shutdown
     GoAway(GoAwayPayload),
 
-    /// MAX_PUSH_ID frame - maximum push ID
+    /// `MAX_PUSH_ID` frame - maximum push ID
     MaxPushId(u64),
 
-    /// CANCEL_PUSH frame - cancel server push
+    /// `CANCEL_PUSH` frame - cancel server push
     CancelPush(u64),
 
-    /// PUSH_PROMISE frame - server push
+    /// `PUSH_PROMISE` frame - server push
     PushPromise(PushPromisePayload),
 
     /// Unknown frame (should be ignored)
@@ -132,6 +136,7 @@ pub enum Frame {
 
 impl Frame {
     /// Get frame type
+    #[must_use]
     pub fn frame_type(&self) -> FrameType {
         match self {
             Self::Data(_) => FrameType::Data,
@@ -146,21 +151,25 @@ impl Frame {
     }
 
     /// Check if this is a DATA frame
+    #[must_use]
     pub fn is_data(&self) -> bool {
         matches!(self, Self::Data(_))
     }
 
     /// Check if this is a HEADERS frame
+    #[must_use]
     pub fn is_headers(&self) -> bool {
         matches!(self, Self::Headers(_))
     }
 
     /// Check if this is a SETTINGS frame
+    #[must_use]
     pub fn is_settings(&self) -> bool {
         matches!(self, Self::Settings(_))
     }
 
     /// Encode frame to bytes
+    #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::new();
 
@@ -221,6 +230,11 @@ impl Frame {
     }
 
     /// Decode frame from bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the frame data is malformed or incomplete.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn decode(buf: &[u8]) -> Http3Result<(Self, usize)> {
         let mut offset = 0;
 
@@ -231,6 +245,7 @@ impl Frame {
         offset += n;
 
         // Guard against oversized frames (16 MB limit)
+        #[allow(clippy::items_after_statements)]
         const MAX_FRAME_SIZE: u64 = 16 * 1024 * 1024;
         if length > MAX_FRAME_SIZE {
             return Err(Http3Error::FrameError);
@@ -304,7 +319,7 @@ pub struct GoAwayPayload {
     pub stream_id: u64,
 }
 
-/// PUSH_PROMISE frame payload
+/// `PUSH_PROMISE` frame payload
 #[derive(Debug, Clone)]
 pub struct PushPromisePayload {
     /// Push ID
@@ -357,44 +372,51 @@ impl Settings {
     /// Enable connect protocol setting identifier (RFC 9220)
     pub const ENABLE_CONNECT_PROTOCOL: u64 = 0x08;
     /// Enable WebTransport setting identifier
-    pub const ENABLE_WEBTRANSPORT: u64 = 0x2b603742;
+    pub const ENABLE_WEBTRANSPORT: u64 = 0x2b60_3742;
 
     /// Create default settings
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set max field section size
+    #[must_use]
     pub fn with_max_field_section_size(mut self, size: u64) -> Self {
         self.max_field_section_size = Some(size);
         self
     }
 
     /// Set QPACK max table capacity
+    #[must_use]
     pub fn with_qpack_max_table_capacity(mut self, capacity: u64) -> Self {
         self.qpack_max_table_capacity = Some(capacity);
         self
     }
 
     /// Set QPACK blocked streams
+    #[must_use]
     pub fn with_qpack_blocked_streams(mut self, blocked: u64) -> Self {
         self.qpack_blocked_streams = Some(blocked);
         self
     }
 
     /// Enable connect protocol
+    #[must_use]
     pub fn with_connect_protocol(mut self, enabled: bool) -> Self {
         self.enable_connect_protocol = Some(enabled);
         self
     }
 
     /// Enable WebTransport
+    #[must_use]
     pub fn with_webtransport(mut self, enabled: bool) -> Self {
         self.enable_webtransport = Some(enabled);
         self
     }
 
     /// Encode settings to bytes
+    #[must_use]
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::new();
 
@@ -436,6 +458,10 @@ impl Settings {
     }
 
     /// Decode settings from bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the settings data is malformed.
     pub fn decode(buf: &[u8]) -> Http3Result<Self> {
         let mut settings = Self::default();
         let mut offset = 0;
@@ -496,6 +522,7 @@ impl Settings {
 }
 
 /// Encode a variable-length integer (QUIC RFC 9000 Section 16)
+#[allow(clippy::cast_possible_truncation)]
 pub fn encode_varint(buf: &mut Vec<u8>, value: u64) {
     if value < 64 {
         buf.push(value as u8);
@@ -520,6 +547,10 @@ pub fn encode_varint(buf: &mut Vec<u8>, value: u64) {
 }
 
 /// Decode a variable-length integer
+///
+/// # Errors
+///
+/// Returns an error if the buffer is empty or too short.
 pub fn decode_varint(buf: &[u8]) -> Http3Result<(u64, usize)> {
     if buf.is_empty() {
         return Err(Http3Error::FrameError);
@@ -532,10 +563,10 @@ pub fn decode_varint(buf: &[u8]) -> Http3Result<(u64, usize)> {
         return Err(Http3Error::FrameError);
     }
 
-    let mut value = (buf[0] & 0x3f) as u64;
+    let mut value = u64::from(buf[0] & 0x3f);
 
-    for byte in buf[1..length].iter() {
-        value = (value << 8) | (*byte as u64);
+    for byte in &buf[1..length] {
+        value = (value << 8) | u64::from(*byte);
     }
 
     Ok((value, length))
@@ -562,6 +593,7 @@ pub enum StreamType {
 
 impl StreamType {
     /// Get stream type value
+    #[must_use]
     pub fn value(&self) -> u64 {
         match self {
             Self::Control => 0x00,
@@ -573,6 +605,7 @@ impl StreamType {
     }
 
     /// Create from value
+    #[must_use]
     pub fn from_value(value: u64) -> Self {
         match value {
             0x00 => Self::Control,
@@ -584,6 +617,7 @@ impl StreamType {
     }
 
     /// Check if this is a critical stream type
+    #[must_use]
     pub fn is_critical(&self) -> bool {
         matches!(
             self,
@@ -599,7 +633,7 @@ impl std::fmt::Display for StreamType {
             Self::Push => write!(f, "push"),
             Self::QpackEncoder => write!(f, "qpack-encoder"),
             Self::QpackDecoder => write!(f, "qpack-decoder"),
-            Self::Unknown(v) => write!(f, "unknown(0x{:x})", v),
+            Self::Unknown(v) => write!(f, "unknown(0x{v:x})"),
         }
     }
 }
@@ -655,14 +689,14 @@ mod tests {
 
     #[test]
     fn test_varint_encode_decode() {
-        let test_values = [0, 63, 64, 16383, 16384, 1073741823, 1073741824];
+        let test_values = [0, 63, 64, 16_383, 16_384, 1_073_741_823, 1_073_741_824];
 
         for value in test_values {
             let mut buf = Vec::new();
             encode_varint(&mut buf, value);
 
             let (decoded, _) = decode_varint(&buf).unwrap();
-            assert_eq!(decoded, value, "failed for value {}", value);
+            assert_eq!(decoded, value, "failed for value {value}");
         }
     }
 

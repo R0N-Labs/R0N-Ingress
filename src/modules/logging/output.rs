@@ -11,9 +11,17 @@ use std::sync::{Arc, Mutex};
 /// Log output trait
 pub trait LogOutput: Send + Sync {
     /// Write a log entry
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails.
     fn write(&self, entry: &LogEntry) -> LogResult<()>;
 
     /// Flush buffered output
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing fails.
     fn flush(&self) -> LogResult<()>;
 
     /// Get the output type
@@ -40,6 +48,7 @@ pub struct StdoutOutput {
 
 impl StdoutOutput {
     /// Create a new stdout output
+    #[must_use]
     pub fn new(
         min_level: LogLevel,
         format: LogFormat,
@@ -73,7 +82,7 @@ impl LogOutput for StdoutOutput {
 
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        writeln!(handle, "{}", formatted)?;
+        writeln!(handle, "{formatted}")?;
 
         Ok(())
     }
@@ -109,6 +118,7 @@ pub struct StderrOutput {
 
 impl StderrOutput {
     /// Create a new stderr output
+    #[must_use]
     pub fn new(
         min_level: LogLevel,
         format: LogFormat,
@@ -141,7 +151,7 @@ impl LogOutput for StderrOutput {
 
         let stderr = io::stderr();
         let mut handle = stderr.lock();
-        writeln!(handle, "{}", formatted)?;
+        writeln!(handle, "{formatted}")?;
 
         Ok(())
     }
@@ -180,6 +190,10 @@ pub struct FileOutput {
 
 impl FileOutput {
     /// Create a new file output
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file path is missing or the rotator cannot be created.
     pub fn new(
         config: &OutputConfig,
         default_level: LogLevel,
@@ -269,6 +283,7 @@ pub struct MemoryOutput {
 
 impl MemoryOutput {
     /// Create a new memory output
+    #[must_use]
     pub fn new(
         min_level: LogLevel,
         format: LogFormat,
@@ -348,6 +363,7 @@ pub struct MultiOutput {
 
 impl MultiOutput {
     /// Create a new multi-output
+    #[must_use]
     pub fn new() -> Self {
         Self {
             outputs: Vec::new(),
@@ -360,6 +376,7 @@ impl MultiOutput {
     }
 
     /// Get the number of outputs
+    #[must_use]
     pub fn count(&self) -> usize {
         self.outputs.len()
     }

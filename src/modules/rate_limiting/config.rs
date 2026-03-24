@@ -95,6 +95,10 @@ impl RateLimitConfig {
     }
 
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any rule or sub-configuration is invalid.
     pub fn validate(&self) -> Result<(), String> {
         if let Some(ref limit) = self.default_limit {
             limit.validate()?;
@@ -192,6 +196,10 @@ impl RateLimitRule {
     }
 
     /// Validate the rule.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if tokens or refill rate are zero or inconsistent.
     pub fn validate(&self) -> Result<(), String> {
         if self.max_tokens == 0 {
             return Err("max_tokens must be greater than 0".to_string());
@@ -214,6 +222,7 @@ impl RateLimitRule {
 
     /// Calculate time until the bucket would have enough tokens.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn time_until_available(&self, current_tokens: f64, required: u64) -> Duration {
         if current_tokens >= required as f64 {
             return Duration::ZERO;
@@ -326,6 +335,10 @@ impl Default for PerIpConfig {
 
 impl PerIpConfig {
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `max_requests` or `refill_rate` is zero.
     pub fn validate(&self) -> Result<(), String> {
         if self.max_requests == 0 {
             return Err("per_ip.max_requests must be greater than 0".to_string());
@@ -439,6 +452,10 @@ impl Default for DistributedConfig {
 
 impl DistributedConfig {
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Redis backend is selected but not configured.
     pub fn validate(&self) -> Result<(), String> {
         match self.backend {
             DistributedBackend::Redis => {
@@ -512,6 +529,10 @@ impl Default for RedisConfig {
 
 impl RedisConfig {
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the URL is empty or has an invalid scheme.
     pub fn validate(&self) -> Result<(), String> {
         if self.url.is_empty() {
             return Err("redis.url cannot be empty".to_string());
@@ -718,7 +739,7 @@ mod tests {
         assert!(config.validate().is_ok());
 
         let bad_config = RedisConfig {
-            url: "".to_string(),
+            url: String::new(),
             ..Default::default()
         };
         assert!(bad_config.validate().is_err());

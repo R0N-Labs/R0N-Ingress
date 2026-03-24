@@ -3,6 +3,7 @@
 //! Provides tools for measuring performance characteristics of gateway components.
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -49,6 +50,7 @@ impl Default for BenchmarkConfig {
 
 impl BenchmarkConfig {
     /// Create a new benchmark configuration.
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -57,36 +59,42 @@ impl BenchmarkConfig {
     }
 
     /// Set benchmark duration.
+    #[must_use]
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.duration = duration;
         self
     }
 
     /// Set warmup duration.
+    #[must_use]
     pub fn with_warmup(mut self, warmup: Duration) -> Self {
         self.warmup = warmup;
         self
     }
 
     /// Set concurrency level.
+    #[must_use]
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         self.concurrency = concurrency.max(1);
         self
     }
 
     /// Set target operations per second.
+    #[must_use]
     pub fn with_target_ops(mut self, ops: u64) -> Self {
         self.target_ops_per_sec = ops;
         self
     }
 
     /// Set description.
+    #[must_use]
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
     }
 
     /// Disable latency collection.
+    #[must_use]
     pub fn without_latency(mut self) -> Self {
         self.collect_latency = false;
         self
@@ -120,16 +128,20 @@ pub struct BenchmarkResult {
 
 impl BenchmarkResult {
     /// Get throughput in operations per second.
+    #[must_use]
     pub fn throughput(&self) -> f64 {
         self.throughput
     }
 
     /// Get total operations.
+    #[must_use]
     pub fn total_ops(&self) -> u64 {
         self.total_ops
     }
 
     /// Get error rate.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn error_rate(&self) -> f64 {
         if self.total_ops == 0 {
             0.0
@@ -139,26 +151,31 @@ impl BenchmarkResult {
     }
 
     /// Get success rate.
+    #[must_use]
     pub fn success_rate(&self) -> f64 {
         1.0 - self.error_rate()
     }
 
     /// Get mean latency.
+    #[must_use]
     pub fn mean_latency(&self) -> Option<Duration> {
         self.latency.as_ref().map(|l| l.mean)
     }
 
     /// Get p50 latency.
+    #[must_use]
     pub fn p50_latency(&self) -> Option<Duration> {
         self.latency.as_ref().map(|l| l.p50)
     }
 
     /// Get p99 latency.
+    #[must_use]
     pub fn p99_latency(&self) -> Option<Duration> {
         self.latency.as_ref().map(|l| l.p99)
     }
 
     /// Format as a summary string.
+    #[must_use]
     pub fn summary(&self) -> String {
         let mut s = format!(
             "{}: {:.2} ops/s, {} total, {:.2}% success",
@@ -169,12 +186,13 @@ impl BenchmarkResult {
         );
 
         if let Some(ref latency) = self.latency {
-            s.push_str(&format!(
+            let _ = write!(
+                s,
                 ", latency: p50={:.2}ms, p99={:.2}ms, max={:.2}ms",
                 latency.p50.as_secs_f64() * 1000.0,
                 latency.p99.as_secs_f64() * 1000.0,
                 latency.max.as_secs_f64() * 1000.0
-            ));
+            );
         }
 
         s
@@ -227,6 +245,8 @@ pub struct LatencyHistogram {
 
 impl LatencyHistogram {
     /// Create a new histogram.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn new(resolution_us: u64, max_us: u64) -> Self {
         let bucket_count = (max_us / resolution_us) as usize + 1;
         let mut buckets = Vec::with_capacity(bucket_count);
@@ -246,6 +266,7 @@ impl LatencyHistogram {
     }
 
     /// Record a latency value.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn record(&self, duration: Duration) {
         let us = duration.as_micros() as u64;
         let bucket = (us / self.resolution_us).min(self.buckets.len() as u64 - 1) as usize;
@@ -284,11 +305,18 @@ impl LatencyHistogram {
     }
 
     /// Get total count.
+    #[must_use]
     pub fn count(&self) -> u64 {
         self.count.load(Ordering::Relaxed)
     }
 
     /// Calculate statistics.
+    #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     pub fn stats(&self) -> Option<LatencyStats> {
         let count = self.count.load(Ordering::Relaxed);
         if count == 0 {
@@ -332,6 +360,11 @@ impl LatencyHistogram {
         })
     }
 
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     fn percentile(&self, buckets: &[u64], total: u64, percentile: f64) -> u64 {
         let target = (total as f64 * percentile) as u64;
         let mut cumulative = 0u64;
@@ -393,6 +426,7 @@ impl Default for ThroughputMetrics {
 
 impl ThroughputMetrics {
     /// Create new metrics collector.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             ops: AtomicU64::new(0),
@@ -423,16 +457,19 @@ impl ThroughputMetrics {
     }
 
     /// Get total operations.
+    #[must_use]
     pub fn total_ops(&self) -> u64 {
         self.ops.load(Ordering::Relaxed)
     }
 
     /// Get total errors.
+    #[must_use]
     pub fn total_errors(&self) -> u64 {
         self.errors.load(Ordering::Relaxed)
     }
 
     /// Get total bytes.
+    #[must_use]
     pub fn total_bytes(&self) -> u64 {
         self.bytes.load(Ordering::Relaxed)
     }
@@ -446,6 +483,7 @@ impl ThroughputMetrics {
     }
 
     /// Get samples.
+    #[must_use]
     pub fn get_samples(&self) -> Vec<u64> {
         self.samples.lock().map(|s| s.clone()).unwrap_or_default()
     }
@@ -470,6 +508,7 @@ pub struct Benchmark {
 
 impl Benchmark {
     /// Create a new benchmark.
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             config: BenchmarkConfig::new(name),
@@ -477,24 +516,28 @@ impl Benchmark {
     }
 
     /// Set configuration.
+    #[must_use]
     pub fn with_config(mut self, config: BenchmarkConfig) -> Self {
         self.config = config;
         self
     }
 
     /// Set duration.
+    #[must_use]
     pub fn with_duration(mut self, duration: Duration) -> Self {
         self.config.duration = duration;
         self
     }
 
     /// Set concurrency.
+    #[must_use]
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         self.config.concurrency = concurrency.max(1);
         self
     }
 
     /// Run the benchmark with a synchronous function.
+    #[allow(clippy::cast_precision_loss)]
     pub fn run_sync<F, R>(&self, f: F) -> BenchmarkResult
     where
         F: Fn() -> R + Send + Sync + Clone + 'static,
@@ -591,6 +634,7 @@ impl Benchmark {
     }
 
     /// Run the benchmark with an async function.
+    #[allow(clippy::cast_precision_loss)]
     pub async fn run_async<F, Fut, R>(&self, f: F) -> BenchmarkResult
     where
         F: Fn() -> Fut + Send + Sync + Clone + 'static,
@@ -684,6 +728,7 @@ pub struct BenchmarkRunner {
 
 impl BenchmarkRunner {
     /// Create a new runner.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -695,6 +740,7 @@ impl BenchmarkRunner {
     }
 
     /// Get results.
+    #[must_use]
     pub fn results(&self) -> &HashMap<String, BenchmarkResult> {
         &self.results
     }
@@ -705,46 +751,54 @@ impl BenchmarkRunner {
     }
 
     /// Generate a report.
+    #[must_use]
     pub fn report(&self) -> String {
         let mut report = String::new();
         report.push_str("=== Benchmark Report ===\n\n");
 
         for (name, result) in &self.results {
-            report.push_str(&format!("{}\n", name));
-            report.push_str(&format!("  Throughput: {:.2} ops/s\n", result.throughput));
-            report.push_str(&format!("  Total Ops:  {}\n", result.total_ops));
-            report.push_str(&format!("  Errors:     {}\n", result.total_errors));
-            report.push_str(&format!(
-                "  Duration:   {:.2}s\n",
+            let _ = writeln!(report, "{name}");
+            let _ = writeln!(report, "  Throughput: {:.2} ops/s", result.throughput);
+            let _ = writeln!(report, "  Total Ops:  {}", result.total_ops);
+            let _ = writeln!(report, "  Errors:     {}", result.total_errors);
+            let _ = writeln!(
+                report,
+                "  Duration:   {:.2}s",
                 result.duration.as_secs_f64()
-            ));
+            );
 
             if let Some(ref latency) = result.latency {
                 report.push_str("  Latency:\n");
-                report.push_str(&format!(
-                    "    min:   {:.2}ms\n",
+                let _ = writeln!(
+                    report,
+                    "    min:   {:.2}ms",
                     latency.min.as_secs_f64() * 1000.0
-                ));
-                report.push_str(&format!(
-                    "    mean:  {:.2}ms\n",
+                );
+                let _ = writeln!(
+                    report,
+                    "    mean:  {:.2}ms",
                     latency.mean.as_secs_f64() * 1000.0
-                ));
-                report.push_str(&format!(
-                    "    p50:   {:.2}ms\n",
+                );
+                let _ = writeln!(
+                    report,
+                    "    p50:   {:.2}ms",
                     latency.p50.as_secs_f64() * 1000.0
-                ));
-                report.push_str(&format!(
-                    "    p90:   {:.2}ms\n",
+                );
+                let _ = writeln!(
+                    report,
+                    "    p90:   {:.2}ms",
                     latency.p90.as_secs_f64() * 1000.0
-                ));
-                report.push_str(&format!(
-                    "    p99:   {:.2}ms\n",
+                );
+                let _ = writeln!(
+                    report,
+                    "    p99:   {:.2}ms",
                     latency.p99.as_secs_f64() * 1000.0
-                ));
-                report.push_str(&format!(
-                    "    max:   {:.2}ms\n",
+                );
+                let _ = writeln!(
+                    report,
+                    "    max:   {:.2}ms",
                     latency.max.as_secs_f64() * 1000.0
-                ));
+                );
             }
             report.push('\n');
         }
@@ -766,6 +820,7 @@ pub struct BenchmarkSuite {
 
 impl BenchmarkSuite {
     /// Create a new suite.
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -775,6 +830,7 @@ impl BenchmarkSuite {
     }
 
     /// Set description.
+    #[must_use]
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
@@ -786,6 +842,7 @@ impl BenchmarkSuite {
     }
 
     /// Get runner.
+    #[must_use]
     pub fn runner(&self) -> &BenchmarkRunner {
         &self.runner
     }
@@ -796,15 +853,17 @@ impl BenchmarkSuite {
     }
 
     /// Get suite name.
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Generate report.
+    #[must_use]
     pub fn report(&self) -> String {
         let mut report = format!("=== {} ===\n", self.name);
         if let Some(ref desc) = self.description {
-            report.push_str(&format!("{}\n", desc));
+            let _ = writeln!(report, "{desc}");
         }
         report.push('\n');
         report.push_str(&self.runner.report());

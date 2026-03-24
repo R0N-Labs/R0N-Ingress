@@ -85,8 +85,7 @@ impl fmt::Display for WebSocketError {
             } => {
                 write!(
                     f,
-                    "Subprotocol mismatch: requested {:?}, available {:?}",
-                    requested, available
+                    "Subprotocol mismatch: requested {requested:?}, available {available:?}"
                 )
             },
             Self::OriginNotAllowed(origin) => write!(f, "Origin not allowed: {origin}"),
@@ -151,7 +150,7 @@ mod tests {
     fn test_frame_too_large() {
         let err = WebSocketError::FrameTooLarge {
             max: 65536,
-            actual: 100000,
+            actual: 100_000,
         };
         let msg = err.to_string();
         assert!(msg.contains("Frame too large"));

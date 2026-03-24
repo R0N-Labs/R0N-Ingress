@@ -27,6 +27,10 @@ pub struct LogRotator {
 
 impl LogRotator {
     /// Create a new log rotator
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be created or metadata cannot be read.
     pub fn new(path: impl Into<PathBuf>, config: RotationConfig) -> LogResult<Self> {
         let base_path = path.into();
 
@@ -51,16 +55,19 @@ impl LogRotator {
     }
 
     /// Get the current log file path
+    #[must_use]
     pub fn current_path(&self) -> &Path {
         &self.base_path
     }
 
     /// Get the current file size
+    #[must_use]
     pub fn current_size(&self) -> u64 {
         self.current_size
     }
 
     /// Check if rotation is needed
+    #[must_use]
     pub fn needs_rotation(&self) -> bool {
         match self.config.strategy {
             RotationStrategy::Never => false,
@@ -73,28 +80,29 @@ impl LogRotator {
     fn needs_time_rotation(&self, hours: i64) -> bool {
         let now = Utc::now();
 
-        match self.last_rotation {
-            Some(last) => {
-                let duration = now.signed_duration_since(last);
-                duration.num_hours() >= hours
-            },
-            None => {
-                // Check if file exists and was created before current period
-                if self.base_path.exists() {
-                    if let Ok(metadata) = fs::metadata(&self.base_path) {
-                        if let Ok(modified) = metadata.modified() {
-                            let modified: DateTime<Utc> = modified.into();
-                            let duration = now.signed_duration_since(modified);
-                            return duration.num_hours() >= hours;
-                        }
+        if let Some(last) = self.last_rotation {
+            let duration = now.signed_duration_since(last);
+            duration.num_hours() >= hours
+        } else {
+            // Check if file exists and was created before current period
+            if self.base_path.exists() {
+                if let Ok(metadata) = fs::metadata(&self.base_path) {
+                    if let Ok(modified) = metadata.modified() {
+                        let modified: DateTime<Utc> = modified.into();
+                        let duration = now.signed_duration_since(modified);
+                        return duration.num_hours() >= hours;
                     }
                 }
-                false
-            },
+            }
+            false
         }
     }
 
     /// Perform rotation if needed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rotation operation fails.
     pub fn rotate_if_needed(&mut self) -> LogResult<bool> {
         if !self.needs_rotation() {
             return Ok(false);
@@ -105,6 +113,10 @@ impl LogRotator {
     }
 
     /// Force rotation
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if file renaming, compression, or cleanup fails.
     pub fn rotate(&mut self) -> LogResult<()> {
         // Close current writer
         self.writer = None;
@@ -121,7 +133,7 @@ impl LogRotator {
 
         // Compress if configured
         if self.config.compress {
-            self.compress_file(&rotated_path)?;
+            Self::compress_file(&rotated_path)?;
         }
 
         // Clean up old backups
@@ -151,17 +163,16 @@ impl LogRotator {
 
         let parent = self.base_path.parent().unwrap_or(Path::new("."));
 
-        parent.join(format!("{}.{}.{}", stem, timestamp, ext))
+        parent.join(format!("{stem}.{timestamp}.{ext}"))
     }
 
-    fn compress_file(&self, path: &Path) -> LogResult<()> {
+    fn compress_file(path: &Path) -> LogResult<()> {
         // Note: In production, use flate2 or similar for gzip compression
         // For now, just add .gz extension to indicate it should be compressed
-        let compressed_path = path.with_extension(
-            path.extension()
-                .map(|e| format!("{}.gz", e.to_string_lossy()))
-                .unwrap_or_else(|| "gz".to_string()),
-        );
+        let compressed_path = path.with_extension(path.extension().map_or_else(
+            || "gz".to_string(),
+            |e| format!("{}.gz", e.to_string_lossy()),
+        ));
 
         // Placeholder: In real implementation, compress the file
         // For now, just rename
@@ -180,15 +191,12 @@ impl LogRotator {
 
         // Collect backup files
         let mut backups: Vec<PathBuf> = fs::read_dir(parent)?
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .map(|e| e.path())
             .filter(|p| {
-                p.file_name()
-                    .and_then(|n| n.to_str())
-                    .map(|n| {
-                        n.starts_with(stem) && n != self.base_path.file_name().unwrap_or_default()
-                    })
-                    .unwrap_or(false)
+                p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                    n.starts_with(stem) && n != self.base_path.file_name().unwrap_or_default()
+                })
             })
             .collect();
 
@@ -215,6 +223,14 @@ impl LogRotator {
     }
 
     /// Get or create the file writer
+    ///
+    /// # Panics
+    ///
+    /// Panics if the writer option is `None` after initialization (should never happen).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be opened.
     pub fn writer(&mut self) -> LogResult<&mut BufWriter<File>> {
         if self.writer.is_none() {
             let file = OpenOptions::new()
@@ -229,6 +245,10 @@ impl LogRotator {
     }
 
     /// Write data to the log file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rotation or writing fails.
     pub fn write(&mut self, data: &[u8]) -> LogResult<()> {
         // Check rotation first
         self.rotate_if_needed()?;
@@ -243,6 +263,10 @@ impl LogRotator {
     }
 
     /// Flush the writer
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing fails.
     pub fn flush(&mut self) -> LogResult<()> {
         if let Some(writer) = &mut self.writer {
             writer.flush()?;
@@ -257,11 +281,12 @@ impl std::fmt::Debug for LogRotator {
             .field("base_path", &self.base_path)
             .field("current_size", &self.current_size)
             .field("strategy", &self.config.strategy)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
 /// Generate a time-based log filename
+#[must_use]
 pub fn time_based_filename(base: &Path, pattern: &str) -> PathBuf {
     let now = Utc::now();
 
@@ -277,7 +302,7 @@ pub fn time_based_filename(base: &Path, pattern: &str) -> PathBuf {
     let ext = base.extension().and_then(|s| s.to_str()).unwrap_or("log");
     let parent = base.parent().unwrap_or(Path::new("."));
 
-    parent.join(format!("{}.{}.{}", stem, formatted, ext))
+    parent.join(format!("{stem}.{formatted}.{ext}"))
 }
 
 #[cfg(test)]

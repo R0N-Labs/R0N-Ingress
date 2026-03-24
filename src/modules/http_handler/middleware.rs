@@ -29,11 +29,19 @@ pub trait Middleware: Send + Sync {
     fn name(&self) -> &str;
 
     /// Process request before handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if request processing fails.
     fn before(&self, request: Request) -> HttpResult<MiddlewareAction> {
         Ok(MiddlewareAction::Continue(request))
     }
 
     /// Process response after handler.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if response processing fails.
     fn after(&self, _request: &Request, response: Response) -> HttpResult<Response> {
         Ok(response)
     }
@@ -76,6 +84,10 @@ impl MiddlewareChain {
     }
 
     /// Process request through the middleware chain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any middleware in the chain fails.
     pub fn process_request(&self, mut request: Request) -> HttpResult<MiddlewareAction> {
         for mw in &self.middleware {
             match mw.before(request)? {
@@ -87,6 +99,10 @@ impl MiddlewareChain {
     }
 
     /// Process response through the middleware chain (reverse order).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any middleware in the chain fails.
     pub fn process_response(
         &self,
         request: &Request,
@@ -153,7 +169,7 @@ impl RequestIdMiddleware {
             .unwrap_or_default()
             .as_nanos();
         let random: u32 = rand::random();
-        format!("{:x}-{:08x}", timestamp, random)
+        format!("{timestamp:x}-{random:08x}")
     }
 }
 
@@ -164,7 +180,7 @@ impl Default for RequestIdMiddleware {
 }
 
 impl Middleware for RequestIdMiddleware {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "request-id"
     }
 
@@ -215,7 +231,7 @@ impl Default for TimingMiddleware {
 }
 
 impl Middleware for TimingMiddleware {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "timing"
     }
 
@@ -282,7 +298,7 @@ impl Default for LoggerMiddleware {
 }
 
 impl Middleware for LoggerMiddleware {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "logger"
     }
 
@@ -352,18 +368,21 @@ impl HeadersMiddleware {
     }
 
     /// Add a request header.
+    #[must_use]
     pub fn add_request_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.request_add.insert(name.into(), value.into());
         self
     }
 
     /// Remove a request header.
+    #[must_use]
     pub fn remove_request_header(mut self, name: impl Into<String>) -> Self {
         self.request_remove.push(name.into());
         self
     }
 
     /// Add a response header.
+    #[must_use]
     pub fn add_response_header(
         mut self,
         name: impl Into<String>,
@@ -374,6 +393,7 @@ impl HeadersMiddleware {
     }
 
     /// Remove a response header.
+    #[must_use]
     pub fn remove_response_header(mut self, name: impl Into<String>) -> Self {
         self.response_remove.push(name.into());
         self
@@ -387,7 +407,7 @@ impl Default for HeadersMiddleware {
 }
 
 impl Middleware for HeadersMiddleware {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "headers"
     }
 
@@ -451,18 +471,21 @@ impl CorsMiddleware {
     }
 
     /// Set allowed origins.
+    #[must_use]
     pub fn origins(mut self, origins: Vec<String>) -> Self {
         self.allowed_origins = origins;
         self
     }
 
     /// Set allowed methods.
+    #[must_use]
     pub fn methods(mut self, methods: Vec<String>) -> Self {
         self.allowed_methods = methods;
         self
     }
 
     /// Allow credentials.
+    #[must_use]
     pub fn credentials(mut self, allow: bool) -> Self {
         self.allow_credentials = allow;
         self
@@ -476,7 +499,7 @@ impl Default for CorsMiddleware {
 }
 
 impl Middleware for CorsMiddleware {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "cors"
     }
 
@@ -544,7 +567,7 @@ mod tests {
             MiddlewareAction::Continue(req) => {
                 assert!(req.header("x-request-id").is_some());
             },
-            _ => panic!("Expected Continue"),
+            MiddlewareAction::Respond(_) => panic!("Expected Continue"),
         }
     }
 
@@ -557,7 +580,7 @@ mod tests {
             MiddlewareAction::Continue(req) => {
                 assert!(req.header("x-request-id").is_some());
             },
-            _ => panic!("Expected Continue"),
+            MiddlewareAction::Respond(_) => panic!("Expected Continue"),
         }
     }
 
@@ -573,7 +596,7 @@ mod tests {
             MiddlewareAction::Continue(req) => {
                 assert_eq!(req.header("x-custom"), Some("value"));
             },
-            _ => panic!("Expected Continue"),
+            MiddlewareAction::Respond(_) => panic!("Expected Continue"),
         }
     }
 
@@ -589,7 +612,7 @@ mod tests {
             MiddlewareAction::Respond(resp) => {
                 assert!(resp.header("access-control-allow-origin").is_some());
             },
-            _ => panic!("Expected Respond for OPTIONS"),
+            MiddlewareAction::Continue(_) => panic!("Expected Respond for OPTIONS"),
         }
     }
 

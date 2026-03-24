@@ -1,4 +1,4 @@
-//! L4 Passthrough handler implementing ModuleContract.
+//! L4 Passthrough handler implementing `ModuleContract`.
 
 use crate::module::{
     Capability, MetricsPayload, ModuleConfig, ModuleContract, ModuleError, ModuleManifest,
@@ -72,7 +72,7 @@ impl BackendSelector {
 
         for addr_str in &config.addresses {
             let addr: SocketAddr = addr_str.parse().map_err(|e| {
-                L4Error::InvalidConfig(format!("Invalid address '{}': {}", addr_str, e))
+                L4Error::InvalidConfig(format!("Invalid address '{addr_str}': {e}"))
             })?;
             addresses.push(addr);
         }
@@ -131,6 +131,7 @@ impl BackendSelector {
                 if let Some(ip) = client_ip {
                     let mut hasher = std::collections::hash_map::DefaultHasher::new();
                     ip.hash(&mut hasher);
+                    #[allow(clippy::cast_possible_truncation)]
                     let hash = hasher.finish() as usize;
                     healthy_indices[hash % healthy_indices.len()]
                 } else {
@@ -181,6 +182,7 @@ impl Default for L4PassthroughHandler {
 
 impl L4PassthroughHandler {
     /// Create a new L4 passthrough handler.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: RwLock::new(L4PassthroughConfig::default()),
@@ -293,15 +295,13 @@ impl L4PassthroughHandler {
                 Ok(Err(e)) => {
                     stats.backend_failure();
                     return Err(L4Error::BackendConnection(format!(
-                        "Failed to connect to {}: {}",
-                        backend_addr, e
+                        "Failed to connect to {backend_addr}: {e}"
                     )));
                 },
                 Err(_) => {
                     stats.backend_failure();
                     return Err(L4Error::Timeout(format!(
-                        "Connection to {} timed out",
-                        backend_addr
+                        "Connection to {backend_addr} timed out"
                     )));
                 },
             };
@@ -505,59 +505,56 @@ impl L4PassthroughHandler {
             sockets.get(&client_addr).cloned()
         };
 
-        let backend_socket = match backend_socket {
-            Some(s) => s,
-            None => {
-                // Create new socket for this client
-                let socket = UdpSocket::bind("0.0.0.0:0").await?;
-                let socket = Arc::new(socket);
+        let backend_socket = if let Some(s) = backend_socket {
+            s
+        } else {
+            // Create new socket for this client
+            let socket = UdpSocket::bind("0.0.0.0:0").await?;
+            let socket = Arc::new(socket);
 
-                // Spawn response handler
-                let client_socket = client_socket.clone();
-                let response_socket = socket.clone();
-                let tracker = tracker.clone();
-                let stats = stats.clone();
-                let listener_name = listener_name.clone();
+            // Spawn response handler
+            let client_socket = client_socket.clone();
+            let response_socket = socket.clone();
+            let tracker = tracker.clone();
+            let stats = stats.clone();
+            let listener_name = listener_name.clone();
 
-                tokio::spawn(async move {
-                    let mut buf = vec![0u8; 65535];
-                    loop {
-                        match timeout(session_timeout, response_socket.recv_from(&mut buf)).await {
-                            Ok(Ok((len, _from))) => {
-                                // Forward response to client
-                                if let Err(e) =
-                                    client_socket.send_to(&buf[..len], client_addr).await
-                                {
-                                    warn!("Failed to send UDP response to {}: {}", client_addr, e);
-                                    break;
-                                }
-                                stats.bytes_sent(len as u64);
-                                tracker.update_udp_session_stats(
-                                    client_addr,
-                                    &listener_name,
-                                    1,
-                                    0,
-                                    len as u64,
-                                    0,
-                                );
-                            },
-                            Ok(Err(e)) => {
-                                debug!("UDP backend socket error: {}", e);
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 65535];
+                loop {
+                    match timeout(session_timeout, response_socket.recv_from(&mut buf)).await {
+                        Ok(Ok((len, _from))) => {
+                            // Forward response to client
+                            if let Err(e) = client_socket.send_to(&buf[..len], client_addr).await {
+                                warn!("Failed to send UDP response to {}: {}", client_addr, e);
                                 break;
-                            },
-                            Err(_) => {
-                                // Session timeout
-                                debug!("UDP session {} timed out", client_addr);
-                                break;
-                            },
-                        }
+                            }
+                            stats.bytes_sent(len as u64);
+                            tracker.update_udp_session_stats(
+                                client_addr,
+                                &listener_name,
+                                1,
+                                0,
+                                len as u64,
+                                0,
+                            );
+                        },
+                        Ok(Err(e)) => {
+                            debug!("UDP backend socket error: {}", e);
+                            break;
+                        },
+                        Err(_) => {
+                            // Session timeout
+                            debug!("UDP session {} timed out", client_addr);
+                            break;
+                        },
                     }
-                });
+                }
+            });
 
-                let mut sockets = backend_sockets.write().await;
-                sockets.insert(client_addr, socket.clone());
-                socket
-            },
+            let mut sockets = backend_sockets.write().await;
+            sockets.insert(client_addr, socket.clone());
+            socket
         };
 
         // Send to backend
@@ -600,8 +597,7 @@ impl ModuleContract for L4PassthroughHandler {
                 Ok(listeners) => l4_config.listeners = listeners,
                 Err(e) => {
                     return Err(ModuleError::ConfigError(format!(
-                        "Failed to parse listeners: {}",
-                        e
+                        "Failed to parse listeners: {e}"
                     )));
                 },
             }
@@ -613,8 +609,7 @@ impl ModuleContract for L4PassthroughHandler {
                 Ok(backends) => l4_config.backends = backends,
                 Err(e) => {
                     return Err(ModuleError::ConfigError(format!(
-                        "Failed to parse backends: {}",
-                        e
+                        "Failed to parse backends: {e}"
                     )));
                 },
             }
@@ -773,6 +768,7 @@ impl ModuleContract for L4PassthroughHandler {
         self.status.blocking_read().clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 

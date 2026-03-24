@@ -27,6 +27,10 @@ impl TopicName {
     }
 
     /// Validate a topic name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the topic name is empty, contains null characters, or wildcards.
     pub fn validate(name: &str) -> MqttResult<()> {
         if name.is_empty() {
             return Err(MqttError::InvalidTopicName(
@@ -52,6 +56,7 @@ impl TopicName {
     }
 
     /// Get the topic name as a string.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.name
     }
@@ -62,6 +67,7 @@ impl TopicName {
     }
 
     /// Check if this topic matches a filter.
+    #[must_use]
     pub fn matches(&self, filter: &TopicFilter) -> bool {
         filter.matches(self)
     }
@@ -125,6 +131,10 @@ impl TopicFilter {
     }
 
     /// Validate a topic filter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the filter is empty or has invalid wildcard placement.
     pub fn validate(filter: &str) -> MqttResult<()> {
         if filter.is_empty() {
             return Err(MqttError::InvalidTopicFilter(
@@ -168,17 +178,20 @@ impl TopicFilter {
     }
 
     /// Get the topic filter as a string.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.filter
     }
 
     /// Check if this filter matches a topic name.
+    #[must_use]
     pub fn matches(&self, topic: &TopicName) -> bool {
         let topic_levels: Vec<&str> = topic.name.split('/').collect();
         self.matches_levels(&topic_levels)
     }
 
     /// Check if this filter matches topic levels.
+    #[must_use]
     pub fn matches_str(&self, topic: &str) -> bool {
         let topic_levels: Vec<&str> = topic.split('/').collect();
         self.matches_levels(&topic_levels)
@@ -192,19 +205,15 @@ impl TopicFilter {
         loop {
             match (filter_iter.next(), topic_iter.next()) {
                 // Both exhausted - match
-                (None, None) => return true,
-
                 // Multi-level wildcard matches everything remaining
-                (Some(FilterLevel::MultiWildcard), _) => return true,
+                (None, None) | (Some(FilterLevel::MultiWildcard), _) => return true,
 
                 // Filter exhausted but topic has more levels
-                (None, Some(_)) => return false,
-
                 // Topic exhausted but filter has more levels (and not #)
-                (Some(_), None) => return false,
+                (None, Some(_)) | (Some(_), None) => return false,
 
                 // Single-level wildcard matches any single level
-                (Some(FilterLevel::SingleWildcard), Some(_)) => continue,
+                (Some(FilterLevel::SingleWildcard), Some(_)) => {},
 
                 // Exact match required
                 (Some(FilterLevel::Exact(f)), Some(t)) => {
@@ -217,6 +226,7 @@ impl TopicFilter {
     }
 
     /// Check if this filter contains wildcards.
+    #[must_use]
     pub fn has_wildcards(&self) -> bool {
         self.levels
             .iter()
@@ -225,6 +235,7 @@ impl TopicFilter {
 
     /// Get the specificity of this filter (for routing priority).
     /// Higher values mean more specific.
+    #[must_use]
     pub fn specificity(&self) -> usize {
         let mut score = 0;
         for level in &self.levels {
@@ -239,12 +250,14 @@ impl TopicFilter {
 
     /// Check if this is a shared subscription filter.
     /// Shared subscriptions have the format $share/{ShareName}/{filter}
+    #[must_use]
     pub fn is_shared(&self) -> bool {
         self.filter.starts_with("$share/")
     }
 
     /// Parse a shared subscription filter.
-    /// Returns (share_name, actual_filter) if this is a shared subscription.
+    /// Returns (`share_name`, `actual_filter`) if this is a shared subscription.
+    #[must_use]
     pub fn parse_shared(&self) -> Option<(&str, &str)> {
         if !self.is_shared() {
             return None;
@@ -336,11 +349,16 @@ impl<T> Default for TopicNode<T> {
 
 impl<T: Clone> TopicTree<T> {
     /// Create a new empty topic tree.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Insert a value with a topic filter.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the single-wildcard node is `None` after being set (should never happen).
     pub fn insert(&mut self, filter: &TopicFilter, value: T) {
         let mut node = &mut self.root;
 
@@ -366,15 +384,16 @@ impl<T: Clone> TopicTree<T> {
     }
 
     /// Find all values that match a topic name.
+    #[must_use]
     pub fn find_matches(&self, topic: &TopicName) -> Vec<T> {
         let levels: Vec<&str> = topic.name.split('/').collect();
         let mut results = Vec::new();
-        self.collect_matches(&self.root, &levels, &mut results);
+        Self::collect_matches(&self.root, &levels, &mut results);
         results
     }
 
     /// Recursively collect matching values.
-    fn collect_matches(&self, node: &TopicNode<T>, levels: &[&str], results: &mut Vec<T>) {
+    fn collect_matches(node: &TopicNode<T>, levels: &[&str], results: &mut Vec<T>) {
         // Multi-level wildcard matches everything
         results.extend(node.multi_wildcard.iter().cloned());
 
@@ -388,12 +407,12 @@ impl<T: Clone> TopicTree<T> {
 
         // Check exact match
         if let Some(child) = node.children.get(current) {
-            self.collect_matches(child, rest, results);
+            Self::collect_matches(child, rest, results);
         }
 
         // Check single-level wildcard
         if let Some(ref wildcard) = node.single_wildcard {
-            self.collect_matches(wildcard, rest, results);
+            Self::collect_matches(wildcard, rest, results);
         }
     }
 

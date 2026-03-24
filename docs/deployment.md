@@ -37,7 +37,7 @@ Create `/etc/systemd/system/r0n-ingress.service`:
 ```ini
 [Unit]
 Description=R0N Ingress
-Documentation=https://github.com/r0n/r0n-ingress
+Documentation=https://github.com/R0N-Labs/R0N-Ingress
 After=network-online.target
 Wants=network-online.target
 

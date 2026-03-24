@@ -78,7 +78,7 @@ struct RoundRobinState {
 }
 
 impl RoundRobinState {
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::cast_possible_truncation)]
     fn next(&self, route_name: &str, backend_count: usize) -> usize {
         let counter = self
             .counters
@@ -177,7 +177,7 @@ impl UdpRouter {
             bytes_received: self.stats.bytes_received.load(Ordering::Relaxed),
             bytes_sent: self.stats.bytes_sent.load(Ordering::Relaxed),
             routing_errors: self.stats.routing_errors.load(Ordering::Relaxed),
-            uptime_seconds: self.started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0),
+            uptime_seconds: self.started_at.map_or(0, |t| t.elapsed().as_secs()),
             sessions: session_stats,
         }
     }
@@ -213,7 +213,7 @@ impl UdpRouter {
     }
 
     /// Select a backend from a route using the configured load balancing strategy.
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::cast_possible_truncation)]
     async fn select_backend<'a>(
         &self,
         route: &'a RouteConfig,
@@ -231,10 +231,7 @@ impl UdpRouter {
             .backends
             .iter()
             .filter(|b| {
-                health
-                    .get(&b.socket_addr())
-                    .map(|h| h.healthy)
-                    .unwrap_or(true) // Assume healthy if not tracked
+                health.get(&b.socket_addr()).map_or(true, |h| h.healthy) // Assume healthy if not tracked
             })
             .collect();
 
@@ -264,13 +261,13 @@ impl UdpRouter {
                 healthy_backends.get(idx).copied()
             },
             LoadBalanceStrategy::WeightedRandom => {
+                use std::collections::hash_map::RandomState;
+                use std::hash::{BuildHasher, Hasher};
+
                 let total_weight: u32 = healthy_backends.iter().map(|b| b.weight).sum();
                 if total_weight == 0 {
                     return healthy_backends.first().copied();
                 }
-
-                use std::collections::hash_map::RandomState;
-                use std::hash::{BuildHasher, Hasher};
 
                 let random = RandomState::new().build_hasher().finish() as u32 % total_weight;
                 let mut cumulative = 0;
@@ -478,6 +475,7 @@ impl ModuleContract for UdpRouter {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn start(&mut self) -> ModuleResult<()> {
         info!("Starting UDP Router");
 
@@ -665,6 +663,7 @@ impl ModuleContract for UdpRouter {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut metrics = MetricsPayload::new();
 
@@ -695,7 +694,7 @@ impl ModuleContract for UdpRouter {
         );
         metrics.gauge(
             "uptime_seconds",
-            self.started_at.map(|t| t.elapsed().as_secs()).unwrap_or(0) as f64,
+            self.started_at.map_or(0, |t| t.elapsed().as_secs()) as f64,
         );
 
         metrics

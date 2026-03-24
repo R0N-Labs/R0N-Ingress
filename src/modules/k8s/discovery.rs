@@ -42,6 +42,7 @@ impl Default for ServiceDiscovery {
 
 impl ServiceDiscovery {
     /// Create a new service discovery instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             services: HashMap::new(),
@@ -63,12 +64,14 @@ impl ServiceDiscovery {
     }
 
     /// Set the watch configuration.
+    #[must_use]
     pub fn with_watch_config(mut self, config: WatchConfig) -> Self {
         self.watch_config = config;
         self
     }
 
     /// Set the label selector.
+    #[must_use]
     pub fn with_label_selector(mut self, selector: LabelSelector) -> Self {
         self.label_selector = Some(selector);
         self
@@ -83,18 +86,21 @@ impl ServiceDiscovery {
     }
 
     /// Get a service by namespace and name.
+    #[must_use]
     pub fn get_service(&self, namespace: &str, name: &str) -> Option<&Service> {
         let key = ServiceKey::new(namespace, name);
         self.services.get(&key)
     }
 
     /// Get endpoints for a service.
+    #[must_use]
     pub fn get_endpoints(&self, namespace: &str, name: &str) -> Option<&[Endpoint]> {
         let key = ServiceKey::new(namespace, name);
-        self.endpoints.get(&key).map(|v| v.as_slice())
+        self.endpoints.get(&key).map(std::vec::Vec::as_slice)
     }
 
     /// Get ready endpoints for a service.
+    #[must_use]
     pub fn get_ready_endpoints(&self, namespace: &str, name: &str) -> Vec<&Endpoint> {
         self.get_endpoints(namespace, name)
             .map(|eps| eps.iter().filter(|e| e.ready).collect())
@@ -107,24 +113,28 @@ impl ServiceDiscovery {
     }
 
     /// Get services by label.
+    #[must_use]
     pub fn find_services_by_label(&self, key: &str, value: &str) -> Vec<&Service> {
         self.services
             .values()
-            .filter(|s| s.labels.get(key).map(|v| v == value).unwrap_or(false))
+            .filter(|s| s.labels.get(key).is_some_and(|v| v == value))
             .collect()
     }
 
     /// Get the total number of discovered services.
+    #[must_use]
     pub fn service_count(&self) -> usize {
         self.services.len()
     }
 
     /// Get the total number of endpoints.
+    #[must_use]
     pub fn endpoint_count(&self) -> usize {
-        self.endpoints.values().map(|v| v.len()).sum()
+        self.endpoints.values().map(std::vec::Vec::len).sum()
     }
 
     /// Get the total number of ready endpoints.
+    #[must_use]
     pub fn ready_endpoint_count(&self) -> usize {
         self.endpoints
             .values()
@@ -134,17 +144,23 @@ impl ServiceDiscovery {
     }
 
     /// Check if a service exists.
+    #[must_use]
     pub fn has_service(&self, namespace: &str, name: &str) -> bool {
         let key = ServiceKey::new(namespace, name);
         self.services.contains_key(&key)
     }
 
     /// Get the last sync time.
+    #[must_use]
     pub fn last_sync(&self) -> Option<Instant> {
         self.last_sync
     }
 
     /// Process a service update event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watch event contains an error status.
     pub fn handle_service_event(&mut self, event: WatchEvent<Service>) -> K8sResult<()> {
         match event {
             WatchEvent::Added(service) | WatchEvent::Modified(service) => {
@@ -170,11 +186,15 @@ impl ServiceDiscovery {
     }
 
     /// Process an endpoints update event.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watch event contains an error status.
     pub fn handle_endpoints_event(&mut self, event: WatchEvent<EndpointSlice>) -> K8sResult<()> {
         match event {
             WatchEvent::Added(slice) | WatchEvent::Modified(slice) => {
                 let key = ServiceKey::new(&slice.namespace, &slice.service_name);
-                let default_port = slice.ports.first().map(|p| p.port).unwrap_or(80);
+                let default_port = slice.ports.first().map_or(80, |p| p.port);
                 let endpoints: Vec<Endpoint> = slice
                     .endpoints
                     .into_iter()
@@ -215,10 +235,10 @@ impl ServiceDiscovery {
     }
 
     /// Resolve a service to backend addresses.
+    #[must_use]
     pub fn resolve(&self, namespace: &str, name: &str, port: Option<u16>) -> Vec<SocketAddr> {
-        let service = match self.get_service(namespace, name) {
-            Some(s) => s,
-            None => return Vec::new(),
+        let Some(service) = self.get_service(namespace, name) else {
+            return Vec::new();
         };
 
         // Determine port to use
@@ -229,9 +249,8 @@ impl ServiceDiscovery {
                 .map(|p| p.target_port.unwrap_or(p.port))
         });
 
-        let target_port = match target_port {
-            Some(p) => p,
-            None => return Vec::new(),
+        let Some(target_port) = target_port else {
+            return Vec::new();
         };
 
         // Get ready endpoints
@@ -242,6 +261,7 @@ impl ServiceDiscovery {
     }
 
     /// Get service cluster IP.
+    #[must_use]
     pub fn get_cluster_ip(&self, namespace: &str, name: &str) -> Option<IpAddr> {
         self.get_service(namespace, name).and_then(|s| s.cluster_ip)
     }
@@ -293,7 +313,7 @@ pub struct Service {
     pub ports: Vec<ServicePort>,
     /// Selector labels.
     pub selector: HashMap<String, String>,
-    /// External name (for ExternalName type).
+    /// External name (for `ExternalName` type).
     pub external_name: Option<String>,
     /// Session affinity.
     pub session_affinity: SessionAffinity,
@@ -324,29 +344,34 @@ impl Service {
     }
 
     /// Add a port to the service.
+    #[must_use]
     pub fn with_port(mut self, port: ServicePort) -> Self {
         self.ports.push(port);
         self
     }
 
     /// Set the cluster IP.
+    #[must_use]
     pub fn with_cluster_ip(mut self, ip: IpAddr) -> Self {
         self.cluster_ip = Some(ip);
         self
     }
 
     /// Add a label.
+    #[must_use]
     pub fn with_label(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.labels.insert(key.into(), value.into());
         self
     }
 
     /// Check if this is a headless service.
+    #[must_use]
     pub fn is_headless(&self) -> bool {
         self.cluster_ip.is_none() && self.service_type == ServiceType::ClusterIP
     }
 
     /// Get the primary port.
+    #[must_use]
     pub fn primary_port(&self) -> Option<&ServicePort> {
         self.ports.first()
     }
@@ -355,14 +380,14 @@ impl Service {
 /// Service type.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ServiceType {
-    /// ClusterIP (default).
+    /// `ClusterIP` (default).
     #[default]
     ClusterIP,
-    /// NodePort.
+    /// `NodePort`.
     NodePort,
-    /// LoadBalancer.
+    /// `LoadBalancer`.
     LoadBalancer,
-    /// ExternalName.
+    /// `ExternalName`.
     ExternalName,
 }
 
@@ -383,6 +408,7 @@ pub struct ServicePort {
 
 impl ServicePort {
     /// Create a new service port.
+    #[must_use]
     pub fn new(port: u16) -> Self {
         Self {
             name: None,
@@ -394,18 +420,21 @@ impl ServicePort {
     }
 
     /// Set the port name.
+    #[must_use]
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
     /// Set the protocol.
+    #[must_use]
     pub fn with_protocol(mut self, protocol: Protocol) -> Self {
         self.protocol = protocol;
         self
     }
 
     /// Set the target port.
+    #[must_use]
     pub fn with_target_port(mut self, port: u16) -> Self {
         self.target_port = Some(port);
         self
@@ -460,6 +489,7 @@ pub struct Endpoint {
 
 impl Endpoint {
     /// Create a new endpoint.
+    #[must_use]
     pub fn new(address: IpAddr, port: u16) -> Self {
         Self {
             address,
@@ -474,29 +504,34 @@ impl Endpoint {
     }
 
     /// Set the ready state.
+    #[must_use]
     pub fn with_ready(mut self, ready: bool) -> Self {
         self.ready = ready;
         self
     }
 
     /// Set the node name.
+    #[must_use]
     pub fn with_node(mut self, node: impl Into<String>) -> Self {
         self.node_name = Some(node.into());
         self
     }
 
     /// Set the zone.
+    #[must_use]
     pub fn with_zone(mut self, zone: impl Into<String>) -> Self {
         self.zone = Some(zone.into());
         self
     }
 
     /// Get the socket address.
+    #[must_use]
     pub fn socket_addr(&self) -> SocketAddr {
         SocketAddr::new(self.address, self.port)
     }
 
     /// Check if this endpoint is usable.
+    #[must_use]
     pub fn is_usable(&self) -> bool {
         self.ready && self.serving && !self.terminating
     }
@@ -509,7 +544,7 @@ pub struct EndpointHints {
     pub for_zones: Vec<String>,
 }
 
-/// EndpointSlice for efficient endpoint updates.
+/// `EndpointSlice` for efficient endpoint updates.
 #[derive(Debug, Clone)]
 pub struct EndpointSlice {
     /// Slice name.
@@ -526,7 +561,7 @@ pub struct EndpointSlice {
     pub ports: Vec<EndpointSlicePort>,
 }
 
-/// Endpoint within an EndpointSlice.
+/// Endpoint within an `EndpointSlice`.
 #[derive(Debug, Clone)]
 pub struct EndpointSliceEndpoint {
     /// Addresses.
@@ -545,7 +580,7 @@ pub struct EndpointSliceEndpoint {
     pub hints: Option<EndpointHints>,
 }
 
-/// Port within an EndpointSlice.
+/// Port within an `EndpointSlice`.
 #[derive(Debug, Clone)]
 pub struct EndpointSlicePort {
     /// Port name.
@@ -621,6 +656,7 @@ pub trait ServiceCallback: Send + Sync + std::fmt::Debug {
 }
 
 /// Simple callback implementation using closures.
+#[allow(clippy::struct_field_names)]
 #[derive(Debug)]
 pub struct FnCallback<F1, F2, F3>
 where

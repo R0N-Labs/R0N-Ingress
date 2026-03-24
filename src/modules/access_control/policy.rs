@@ -227,6 +227,10 @@ impl PolicyEngine {
     }
 
     /// Evaluate the policy for a given context.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if policy evaluation fails.
     pub fn evaluate(&self, context: &PolicyContext) -> AccessControlResult<PolicyDecision> {
         match self.config.strategy {
             PolicyStrategy::FirstMatch => self.evaluate_first_match(context),
@@ -239,11 +243,11 @@ impl PolicyEngine {
     /// First matching rule wins.
     fn evaluate_first_match(&self, context: &PolicyContext) -> AccessControlResult<PolicyDecision> {
         for rule in &self.config.rules {
-            if self.rule_applies(rule, context)
-                && self.evaluate_conditions(&rule.conditions, context)?
+            if Self::rule_applies(rule, context)
+                && Self::evaluate_conditions(&rule.conditions, context)?
             {
                 return Ok(PolicyDecision {
-                    action: rule.action.clone(),
+                    action: rule.action,
                     matched_rule: Some(rule.name.clone()),
                     reason: format!("Rule '{}' matched", rule.name),
                     data: HashMap::new(),
@@ -262,14 +266,14 @@ impl PolicyEngine {
         let mut any_matched = false;
 
         for rule in &self.config.rules {
-            if self.rule_applies(rule, context)
-                && self.evaluate_conditions(&rule.conditions, context)?
+            if Self::rule_applies(rule, context)
+                && Self::evaluate_conditions(&rule.conditions, context)?
             {
                 any_matched = true;
 
                 if !rule.action.is_allow() {
                     return Ok(PolicyDecision {
-                        action: rule.action.clone(),
+                        action: rule.action,
                         matched_rule: Some(rule.name.clone()),
                         reason: format!("Rule '{}' denied access", rule.name),
                         data: HashMap::new(),
@@ -294,21 +298,21 @@ impl PolicyEngine {
         let mut last_deny: Option<PolicyDecision> = None;
 
         for rule in &self.config.rules {
-            if self.rule_applies(rule, context)
-                && self.evaluate_conditions(&rule.conditions, context)?
+            if Self::rule_applies(rule, context)
+                && Self::evaluate_conditions(&rule.conditions, context)?
             {
                 any_matched = true;
 
                 if rule.action.is_allow() {
                     return Ok(PolicyDecision {
-                        action: rule.action.clone(),
+                        action: rule.action,
                         matched_rule: Some(rule.name.clone()),
                         reason: format!("Rule '{}' allowed access", rule.name),
                         data: HashMap::new(),
                     });
                 }
                 last_deny = Some(PolicyDecision {
-                    action: rule.action.clone(),
+                    action: rule.action,
                     matched_rule: Some(rule.name.clone()),
                     reason: format!("Rule '{}' denied access", rule.name),
                     data: HashMap::new(),
@@ -327,11 +331,11 @@ impl PolicyEngine {
     /// Priority-based evaluation (highest priority first).
     fn evaluate_priority(&self, context: &PolicyContext) -> AccessControlResult<PolicyDecision> {
         for rule in &self.sorted_rules {
-            if self.rule_applies(rule, context)
-                && self.evaluate_conditions(&rule.conditions, context)?
+            if Self::rule_applies(rule, context)
+                && Self::evaluate_conditions(&rule.conditions, context)?
             {
                 return Ok(PolicyDecision {
-                    action: rule.action.clone(),
+                    action: rule.action,
                     matched_rule: Some(rule.name.clone()),
                     reason: format!("Rule '{}' matched (priority {})", rule.name, rule.priority),
                     data: HashMap::new(),
@@ -343,13 +347,13 @@ impl PolicyEngine {
     }
 
     /// Check if a rule applies to the current context (route/method).
-    fn rule_applies(&self, rule: &PolicyRule, context: &PolicyContext) -> bool {
+    fn rule_applies(rule: &PolicyRule, context: &PolicyContext) -> bool {
         // Check route
         if !rule.routes.is_empty() {
             let matches_route = rule
                 .routes
                 .iter()
-                .any(|pattern| self.path_matches(pattern, &context.path));
+                .any(|pattern| Self::path_matches(pattern, &context.path));
 
             if !matches_route {
                 return false;
@@ -372,21 +376,20 @@ impl PolicyEngine {
     }
 
     /// Check if a path matches a pattern.
-    fn path_matches(&self, pattern: &str, path: &str) -> bool {
-        if let Some(prefix) = pattern.strip_suffix("/*") {
+    fn path_matches(pattern_str: &str, path: &str) -> bool {
+        if let Some(prefix) = pattern_str.strip_suffix("/*") {
             // "/admin/*" matches "/admin/foo", "/admin/foo/bar"
             path.starts_with(prefix) && path.len() > prefix.len()
-        } else if let Some(prefix) = pattern.strip_suffix('*') {
+        } else if let Some(prefix) = pattern_str.strip_suffix('*') {
             // "/admin*" matches "/admin", "/adminfoo"
             path.starts_with(prefix)
         } else {
-            pattern == path
+            pattern_str == path
         }
     }
 
     /// Evaluate all conditions for a rule.
     fn evaluate_conditions(
-        &self,
         conditions: &[PolicyCondition],
         context: &PolicyContext,
     ) -> AccessControlResult<bool> {
@@ -397,7 +400,7 @@ impl PolicyEngine {
 
         // All conditions must be true (AND logic)
         for condition in conditions {
-            if !self.evaluate_condition(condition, context)? {
+            if !Self::evaluate_condition(condition, context)? {
                 return Ok(false);
             }
         }
@@ -407,7 +410,6 @@ impl PolicyEngine {
 
     /// Evaluate a single condition.
     fn evaluate_condition(
-        &self,
         condition: &PolicyCondition,
         context: &PolicyContext,
     ) -> AccessControlResult<bool> {
@@ -424,8 +426,7 @@ impl PolicyEngine {
 
             PolicyCondition::ClaimContains { claim, value } => Ok(context
                 .get_claim(claim)
-                .map(|v| v.contains(value.as_str()))
-                .unwrap_or(false)),
+                .is_some_and(|v| v.contains(value.as_str()))),
 
             PolicyCondition::HeaderEquals { header, value } => {
                 Ok(context.get_header(header) == Some(value.as_str()))
@@ -440,7 +441,7 @@ impl PolicyEngine {
             PolicyCondition::IpInList { addresses } => {
                 // Parse and check CIDR
                 for addr in addresses {
-                    if self.ip_matches(addr, &context.client_ip) {
+                    if Self::ip_matches(addr, &context.client_ip) {
                         return Ok(true);
                     }
                 }
@@ -458,11 +459,10 @@ impl PolicyEngine {
     }
 
     /// Check if an IP matches a CIDR pattern.
-    fn ip_matches(&self, pattern: &str, ip: &str) -> bool {
+    fn ip_matches(pattern: &str, ip: &str) -> bool {
         // Parse IP
-        let ip_u32 = match Self::parse_ip(ip) {
-            Ok(v) => v,
-            Err(_) => return false,
+        let Ok(ip_u32) = Self::parse_ip(ip) else {
+            return false;
         };
 
         // Parse CIDR
@@ -473,9 +473,8 @@ impl PolicyEngine {
             (pattern, 32)
         };
 
-        let network = match Self::parse_ip(net_str) {
-            Ok(v) => v,
-            Err(_) => return false,
+        let Ok(network) = Self::parse_ip(net_str) else {
+            return false;
         };
 
         let mask = if prefix == 0 {
@@ -498,7 +497,7 @@ impl PolicyEngine {
             let octet: u8 = part
                 .parse()
                 .map_err(|_| AccessControlError::InvalidIpAddress(ip.to_string()))?;
-            result |= (octet as u32) << (24 - i * 8);
+            result |= u32::from(octet) << (24 - i * 8);
         }
 
         Ok(result)
@@ -507,7 +506,7 @@ impl PolicyEngine {
     /// Get the default decision.
     fn default_decision(&self) -> PolicyDecision {
         PolicyDecision {
-            action: self.config.default_action.clone(),
+            action: self.config.default_action,
             matched_rule: None,
             reason: "No rules matched, using default action".to_string(),
             data: HashMap::new(),

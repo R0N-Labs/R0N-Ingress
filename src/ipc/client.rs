@@ -89,7 +89,7 @@ impl IpcClient {
             .map_err(|e| IpcClientError::ReceiveError(e.to_string()))?;
 
         // Decode response length
-        let resp_len = decode_frame_length(&header)
+        let resp_len = decode_frame_length(header)
             .ok_or_else(|| IpcClientError::ProtocolError("invalid response length".to_string()))?;
 
         // Read response body

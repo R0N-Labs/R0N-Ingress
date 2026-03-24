@@ -1,4 +1,4 @@
-//! Metrics collector implementing ModuleContract.
+//! Metrics collector implementing `ModuleContract`.
 
 use super::config::MetricsCollectorConfig;
 use super::error::{MetricsError, MetricsResult};
@@ -62,6 +62,10 @@ impl MetricsCollector {
     }
 
     /// Register a module for metrics collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module is already registered.
     pub fn register_module(&self, name: impl Into<String>) -> MetricsResult<Arc<ModuleMetrics>> {
         self.registry.register_module(name)
     }
@@ -73,6 +77,10 @@ impl MetricsCollector {
     }
 
     /// Unregister a module.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module is not found.
     pub fn unregister_module(&self, name: &str) -> MetricsResult<()> {
         self.registry.unregister_module(name)
     }
@@ -83,10 +91,14 @@ impl MetricsCollector {
         self.registry.encode_prometheus()
     }
 
-    /// Import metrics from a MetricsPayload.
+    /// Import metrics from a `MetricsPayload`.
     ///
-    /// This allows modules using the legacy MetricsPayload API to
+    /// This allows modules using the legacy `MetricsPayload` API to
     /// integrate with the new registry-based system.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the module is not registered.
     pub fn import_payload(&self, module_name: &str, payload: &MetricsPayload) -> MetricsResult<()> {
         let module = self
             .registry
@@ -149,6 +161,7 @@ impl MetricsCollector {
     }
 
     /// Update internal metrics.
+    #[allow(clippy::cast_precision_loss)]
     fn update_internal_metrics(&self) {
         if let Some(ref metrics) = self.internal_metrics {
             let _ = metrics.set_gauge(

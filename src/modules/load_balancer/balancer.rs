@@ -102,7 +102,7 @@ impl std::fmt::Debug for LoadBalancer {
             .field("stats", &self.stats)
             .field("status", &self.status)
             .field("pools", &self.pools.keys().collect::<Vec<_>>())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -140,7 +140,7 @@ impl LoadBalancer {
     }
 
     /// Create a pool from configuration.
-    fn create_pool(&self, pool_config: &PoolConfig) -> LoadBalancerResult<Arc<BackendPool>> {
+    fn create_pool(pool_config: &PoolConfig) -> Arc<BackendPool> {
         let pool = BackendPool::new(&pool_config.name);
 
         for backend_config in &pool_config.backends {
@@ -148,7 +148,7 @@ impl LoadBalancer {
             pool.add_backend(backend);
         }
 
-        Ok(Arc::new(pool))
+        Arc::new(pool)
     }
 
     /// Create a strategy for a pool.
@@ -156,8 +156,7 @@ impl LoadBalancer {
         let sticky_ttl = pool_config
             .sticky
             .as_ref()
-            .map(|s| s.ttl.as_secs())
-            .unwrap_or(3600);
+            .map_or(3600, |s| s.ttl.as_secs());
 
         match strategy_type {
             StrategyType::RoundRobin => StrategyContainer::RoundRobin(RoundRobinStrategy::new()),
@@ -181,6 +180,10 @@ impl LoadBalancer {
     }
 
     /// Select a backend from a pool asynchronously.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool is not found or has no healthy backends.
     pub async fn select_backend(
         &self,
         pool_name: &str,
@@ -216,6 +219,10 @@ impl LoadBalancer {
     }
 
     /// Add a new pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool already exists or cannot be created.
     pub fn add_pool(&mut self, pool_config: PoolConfig) -> LoadBalancerResult<()> {
         if self.pools.contains_key(&pool_config.name) {
             return Err(LoadBalancerError::PoolAlreadyExists(
@@ -224,7 +231,7 @@ impl LoadBalancer {
         }
 
         let strategy_type = pool_config.strategy.unwrap_or(self.config.default_strategy);
-        let pool = self.create_pool(&pool_config)?;
+        let pool = Self::create_pool(&pool_config);
         let strategy = Self::create_strategy(strategy_type, &pool_config);
 
         self.pools.insert(pool_config.name.clone(), pool);
@@ -234,6 +241,10 @@ impl LoadBalancer {
     }
 
     /// Remove a pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool is not found.
     pub fn remove_pool(&mut self, name: &str) -> LoadBalancerResult<()> {
         if self.pools.remove(name).is_none() {
             return Err(LoadBalancerError::PoolNotFound(name.to_string()));
@@ -296,9 +307,7 @@ impl ModuleContract for LoadBalancer {
             }
 
             let strategy_type = pool_config.strategy.unwrap_or(lb_config.default_strategy);
-            let pool = self
-                .create_pool(pool_config)
-                .map_err(|e| ModuleError::ConfigError(e.to_string()))?;
+            let pool = Self::create_pool(pool_config);
             let strategy = Self::create_strategy(strategy_type, pool_config);
 
             debug!(
@@ -387,6 +396,7 @@ impl ModuleContract for LoadBalancer {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut metrics = MetricsPayload::new();
 

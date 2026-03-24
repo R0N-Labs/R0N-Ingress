@@ -76,28 +76,28 @@ pub enum QuicError {
 impl fmt::Display for QuicError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ConnectionClosed(msg) => write!(f, "connection closed: {}", msg),
-            Self::ConnectionRefused(msg) => write!(f, "connection refused: {}", msg),
+            Self::ConnectionClosed(msg) => write!(f, "connection closed: {msg}"),
+            Self::ConnectionRefused(msg) => write!(f, "connection refused: {msg}"),
             Self::ConnectionTimeout => write!(f, "connection timeout"),
             Self::ConnectionReset => write!(f, "connection reset"),
-            Self::Stream(msg) => write!(f, "stream error: {}", msg),
-            Self::StreamClosed(id) => write!(f, "stream {} closed", id),
-            Self::InvalidStreamId(id) => write!(f, "invalid stream ID: {}", id),
-            Self::FlowControl(msg) => write!(f, "flow control error: {}", msg),
-            Self::Crypto(msg) => write!(f, "crypto error: {}", msg),
-            Self::HandshakeFailed(msg) => write!(f, "handshake failed: {}", msg),
-            Self::Certificate(msg) => write!(f, "certificate error: {}", msg),
-            Self::Protocol(msg) => write!(f, "protocol error: {}", msg),
-            Self::FrameEncoding(msg) => write!(f, "frame encoding error: {}", msg),
-            Self::Config(msg) => write!(f, "configuration error: {}", msg),
-            Self::TransportParameter(msg) => write!(f, "transport parameter error: {}", msg),
-            Self::Application(code, msg) => write!(f, "application error {}: {}", code, msg),
+            Self::Stream(msg) => write!(f, "stream error: {msg}"),
+            Self::StreamClosed(id) => write!(f, "stream {id} closed"),
+            Self::InvalidStreamId(id) => write!(f, "invalid stream ID: {id}"),
+            Self::FlowControl(msg) => write!(f, "flow control error: {msg}"),
+            Self::Crypto(msg) => write!(f, "crypto error: {msg}"),
+            Self::HandshakeFailed(msg) => write!(f, "handshake failed: {msg}"),
+            Self::Certificate(msg) => write!(f, "certificate error: {msg}"),
+            Self::Protocol(msg) => write!(f, "protocol error: {msg}"),
+            Self::FrameEncoding(msg) => write!(f, "frame encoding error: {msg}"),
+            Self::Config(msg) => write!(f, "configuration error: {msg}"),
+            Self::TransportParameter(msg) => write!(f, "transport parameter error: {msg}"),
+            Self::Application(code, msg) => write!(f, "application error {code}: {msg}"),
             Self::VersionNegotiation => write!(f, "version negotiation failed"),
             Self::NoConnectionIds => write!(f, "no available connection IDs"),
             Self::AddressValidation => write!(f, "address validation failed"),
             Self::ZeroRttRejected => write!(f, "0-RTT rejected"),
-            Self::Io(err) => write!(f, "IO error: {}", err),
-            Self::Internal(msg) => write!(f, "internal error: {}", msg),
+            Self::Io(err) => write!(f, "IO error: {err}"),
+            Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
 }
@@ -181,11 +181,13 @@ pub enum TransportErrorCode {
 
 impl TransportErrorCode {
     /// Get the error code value
+    #[must_use]
     pub fn code(&self) -> u64 {
         *self as u64
     }
 
     /// Create from a u64 code
+    #[must_use]
     pub fn from_code(code: u64) -> Option<Self> {
         match code {
             0x00 => Some(Self::NoError),
@@ -211,6 +213,7 @@ impl TransportErrorCode {
     }
 
     /// Check if this is a crypto error
+    #[must_use]
     pub fn is_crypto_error(&self) -> bool {
         matches!(self, Self::CryptoError)
     }

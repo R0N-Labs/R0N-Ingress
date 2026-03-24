@@ -2,7 +2,9 @@
 
 use super::bucket::TokenBucket;
 use super::config::{LimitScope, PerIpConfig, RateLimitConfig, RateLimitRule};
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -22,7 +24,7 @@ pub struct RateLimitDecision {
     pub reset_after: Duration,
 
     /// Which limiter made the decision.
-    pub limiter_key: String,
+    pub limiter_key: Cow<'static, str>,
 
     /// The scope that was applied.
     pub scope: LimitScope,
@@ -30,11 +32,12 @@ pub struct RateLimitDecision {
 
 impl RateLimitDecision {
     /// Create an "allowed" decision.
+    #[inline]
     #[must_use]
     pub fn allowed(
         tokens_remaining: u64,
         tokens_limit: u64,
-        limiter_key: String,
+        limiter_key: impl Into<Cow<'static, str>>,
         scope: LimitScope,
     ) -> Self {
         Self {
@@ -42,18 +45,19 @@ impl RateLimitDecision {
             tokens_remaining,
             tokens_limit,
             reset_after: Duration::ZERO,
-            limiter_key,
+            limiter_key: limiter_key.into(),
             scope,
         }
     }
 
     /// Create a "denied" decision.
+    #[inline]
     #[must_use]
     pub fn denied(
         tokens_remaining: u64,
         tokens_limit: u64,
         reset_after: Duration,
-        limiter_key: String,
+        limiter_key: impl Into<Cow<'static, str>>,
         scope: LimitScope,
     ) -> Self {
         Self {
@@ -61,12 +65,13 @@ impl RateLimitDecision {
             tokens_remaining,
             tokens_limit,
             reset_after,
-            limiter_key,
+            limiter_key: limiter_key.into(),
             scope,
         }
     }
 
     /// Get retry-after in seconds (for HTTP header).
+    #[inline]
     #[must_use]
     pub fn retry_after_secs(&self) -> u64 {
         self.reset_after.as_secs().max(1)
@@ -159,7 +164,7 @@ impl std::fmt::Debug for RateLimiter {
             .field("total_checks", &self.total_checks)
             .field("total_allowed", &self.total_allowed)
             .field("total_denied", &self.total_denied)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -191,12 +196,7 @@ impl RateLimiter {
 
         if !self.config.enabled {
             self.total_allowed.fetch_add(1, Ordering::Relaxed);
-            return RateLimitDecision::allowed(
-                u64::MAX,
-                u64::MAX,
-                "disabled".to_string(),
-                LimitScope::Global,
-            );
+            return RateLimitDecision::allowed(u64::MAX, u64::MAX, "disabled", LimitScope::Global);
         }
 
         // Check per-IP limits first (if configured)
@@ -206,10 +206,12 @@ impl RateLimiter {
                     // Check whitelist
                     if per_ip_config.is_whitelisted(ip) {
                         self.total_allowed.fetch_add(1, Ordering::Relaxed);
+                        let mut key = String::with_capacity(4 + ip.len() + 12);
+                        let _ = write!(key, "ip:{ip}:whitelisted");
                         return RateLimitDecision::allowed(
                             u64::MAX,
                             u64::MAX,
-                            format!("ip:{ip}:whitelisted"),
+                            key,
                             LimitScope::PerIp,
                         );
                     }
@@ -217,11 +219,13 @@ impl RateLimiter {
                     // Check blacklist
                     if per_ip_config.is_blacklisted(ip) {
                         self.total_denied.fetch_add(1, Ordering::Relaxed);
+                        let mut key = String::with_capacity(4 + ip.len() + 12);
+                        let _ = write!(key, "ip:{ip}:blacklisted");
                         return RateLimitDecision::denied(
                             0,
                             0,
                             Duration::from_secs(3600),
-                            format!("ip:{ip}:blacklisted"),
+                            key,
                             LimitScope::PerIp,
                         );
                     }
@@ -260,15 +264,11 @@ impl RateLimiter {
 
         // No limits configured - allow
         self.total_allowed.fetch_add(1, Ordering::Relaxed);
-        RateLimitDecision::allowed(
-            u64::MAX,
-            u64::MAX,
-            "no-limit".to_string(),
-            LimitScope::Global,
-        )
+        RateLimitDecision::allowed(u64::MAX, u64::MAX, "no-limit", LimitScope::Global)
     }
 
     /// Check a specific rate limit rule.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn check_rule(
         &self,
         ctx: &RateLimitContext,
@@ -281,7 +281,10 @@ impl RateLimiter {
             &ctx.headers,
         );
 
-        let bucket_key = format!("{}:{}:{}", rule_name, rule.scope_string(), scope_key);
+        let scope_str = rule.scope_string();
+        let mut bucket_key =
+            String::with_capacity(rule_name.len() + scope_str.len() + scope_key.len() + 2);
+        let _ = write!(bucket_key, "{rule_name}:{scope_str}:{scope_key}");
         let bucket = self.get_or_create_bucket(&bucket_key, rule);
 
         if bucket.try_consume(rule.tokens_per_request) {
@@ -300,8 +303,10 @@ impl RateLimiter {
     }
 
     /// Check per-IP rate limit.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn check_ip_limit(&self, ip: &str, config: &PerIpConfig) -> RateLimitDecision {
-        let bucket_key = format!("per-ip:{ip}");
+        let mut bucket_key = String::with_capacity(7 + ip.len());
+        let _ = write!(bucket_key, "per-ip:{ip}");
 
         let rule = RateLimitRule {
             max_tokens: config.max_requests,
@@ -365,6 +370,10 @@ impl RateLimiter {
     }
 
     /// Clean up expired buckets.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn cleanup(&self, max_idle: Duration) {
         let now = Instant::now();
         let mut buckets = self.buckets.write().unwrap();
@@ -373,6 +382,10 @@ impl RateLimiter {
     }
 
     /// Get the number of active buckets.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     #[must_use]
     pub fn active_bucket_count(&self) -> usize {
         self.buckets.read().unwrap().len()
@@ -413,20 +426,19 @@ impl RateLimiter {
 
 // Helper trait to get scope as string
 trait ScopeString {
-    fn scope_string(&self) -> String;
+    fn scope_string(&self) -> Cow<'static, str>;
 }
 
 impl ScopeString for RateLimitRule {
-    fn scope_string(&self) -> String {
+    #[inline]
+    fn scope_string(&self) -> Cow<'static, str> {
         match &self.scope {
-            LimitScope::Global => "global".to_string(),
-            LimitScope::PerIp => "per-ip".to_string(),
-            LimitScope::PerUser => "per-user".to_string(),
-            LimitScope::PerApiKey => "per-api-key".to_string(),
-            LimitScope::PerHeader(h) => format!("per-header:{h}"),
-            LimitScope::Composite(scopes) => {
-                format!("composite:{}", scopes.len())
-            },
+            LimitScope::Global => Cow::Borrowed("global"),
+            LimitScope::PerIp => Cow::Borrowed("per-ip"),
+            LimitScope::PerUser => Cow::Borrowed("per-user"),
+            LimitScope::PerApiKey => Cow::Borrowed("per-api-key"),
+            LimitScope::PerHeader(h) => Cow::Owned(format!("per-header:{h}")),
+            LimitScope::Composite(scopes) => Cow::Owned(format!("composite:{}", scopes.len())),
         }
     }
 }

@@ -40,24 +40,28 @@ impl PluginContext {
     }
 
     /// Set the request ID.
+    #[must_use]
     pub fn with_request_id(mut self, id: impl Into<String>) -> Self {
         self.request_id = Some(id.into());
         self
     }
 
     /// Set the execution deadline.
+    #[must_use]
     pub fn with_deadline(mut self, deadline: Duration) -> Self {
         self.deadline = Some(deadline);
         self
     }
 
     /// Add metadata.
+    #[must_use]
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
     }
 
     /// Set trace context.
+    #[must_use]
     pub fn with_trace(mut self, trace: TraceContext) -> Self {
         self.trace_context = Some(trace);
         self
@@ -98,6 +102,7 @@ impl Default for PluginApi {
 
 impl PluginApi {
     /// Create a new API definition with standard exports.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             version: API_VERSION,
@@ -255,11 +260,13 @@ impl PluginApi {
     }
 
     /// Check if an export is required.
+    #[must_use]
     pub fn is_required(&self, name: &str) -> bool {
         self.required_exports.iter().any(|e| e.name == name)
     }
 
     /// Get an export definition by name.
+    #[must_use]
     pub fn get_export(&self, name: &str) -> Option<&PluginExport> {
         self.required_exports
             .iter()
@@ -268,6 +275,7 @@ impl PluginApi {
     }
 
     /// Get a host function by name.
+    #[must_use]
     pub fn get_host_function(&self, name: &str) -> Option<&HostFunction> {
         self.host_functions.iter().find(|f| f.name == name)
     }
@@ -298,6 +306,7 @@ impl PluginExport {
     }
 
     /// Add a parameter.
+    #[must_use]
     pub fn param(mut self, name: impl Into<String>, value_type: ValueType) -> Self {
         self.params.push(FunctionParam {
             name: name.into(),
@@ -307,18 +316,21 @@ impl PluginExport {
     }
 
     /// Set return type.
+    #[must_use]
     pub fn returns(mut self, value_type: ValueType) -> Self {
         self.returns = Some(value_type);
         self
     }
 
     /// Set description.
+    #[must_use]
     pub fn description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
     }
 
     /// Get function signature string.
+    #[must_use]
     pub fn signature(&self) -> String {
         let params: Vec<String> = self
             .params
@@ -328,7 +340,7 @@ impl PluginExport {
         let ret = self
             .returns
             .as_ref()
-            .map(|r| format!(" -> {:?}", r))
+            .map(|r| format!(" -> {r:?}"))
             .unwrap_or_default();
         format!("{}({}){}", self.name, params.join(", "), ret)
     }
@@ -368,12 +380,14 @@ impl HostFunction {
     }
 
     /// Set module name.
+    #[must_use]
     pub fn module(mut self, module: impl Into<String>) -> Self {
         self.module = module.into();
         self
     }
 
     /// Add a parameter.
+    #[must_use]
     pub fn param(mut self, name: impl Into<String>, value_type: ValueType) -> Self {
         self.params.push(FunctionParam {
             name: name.into(),
@@ -383,24 +397,28 @@ impl HostFunction {
     }
 
     /// Set return type.
+    #[must_use]
     pub fn returns(mut self, value_type: ValueType) -> Self {
         self.returns = Some(value_type);
         self
     }
 
     /// Set required capability.
+    #[must_use]
     pub fn requires_capability(mut self, cap: impl Into<String>) -> Self {
         self.required_capability = Some(cap.into());
         self
     }
 
     /// Set description.
+    #[must_use]
     pub fn description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
         self
     }
 
     /// Get function signature string.
+    #[must_use]
     pub fn signature(&self) -> String {
         let params: Vec<String> = self
             .params
@@ -410,7 +428,7 @@ impl HostFunction {
         let ret = self
             .returns
             .as_ref()
-            .map(|r| format!(" -> {:?}", r))
+            .map(|r| format!(" -> {r:?}"))
             .unwrap_or_default();
         format!(
             "{}::{}({}){}",
@@ -484,18 +502,22 @@ impl RequestData {
     }
 
     /// Set a header.
+    #[must_use]
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(name.into(), value.into());
         self
     }
 
     /// Set the body.
+    #[must_use]
     pub fn with_body(mut self, body: Vec<u8>) -> Self {
         self.body = Some(body);
         self
     }
 
     /// Serialize to bytes.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn to_bytes(&self) -> Vec<u8> {
         // Simple serialization format for WASM
         let mut buf = Vec::new();
@@ -542,6 +564,7 @@ pub struct ResponseData {
 
 impl ResponseData {
     /// Create a new response.
+    #[must_use]
     pub fn new(status: u16) -> Self {
         Self {
             status,
@@ -551,12 +574,14 @@ impl ResponseData {
     }
 
     /// Set a header.
+    #[must_use]
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(name.into(), value.into());
         self
     }
 
     /// Set the body.
+    #[must_use]
     pub fn with_body(mut self, body: Vec<u8>) -> Self {
         self.body = Some(body);
         self
@@ -580,6 +605,7 @@ pub enum PluginAction {
 
 impl PluginAction {
     /// Parse from i32 return value.
+    #[must_use]
     pub fn from_i32(value: i32) -> Self {
         match value {
             0 => Self::Continue,
@@ -591,6 +617,7 @@ impl PluginAction {
     }
 
     /// Convert to i32.
+    #[must_use]
     pub fn to_i32(&self) -> i32 {
         match self {
             Self::Continue => 0,

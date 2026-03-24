@@ -10,6 +10,7 @@ use std::str::FromStr;
 const MAX_HEADERS: usize = 100;
 
 /// Parsed HTTP request.
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone)]
 pub struct Request {
     /// HTTP method.
@@ -68,7 +69,9 @@ impl Request {
     /// Get a header value.
     #[must_use]
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.get(&name.to_lowercase()).map(|s| s.as_str())
+        self.headers
+            .get(&name.to_lowercase())
+            .map(std::string::String::as_str)
     }
 
     /// Get all headers.
@@ -136,20 +139,22 @@ impl Request {
             Version::HTTP_11 | Version::HTTP_2 => {
                 // Default to keep-alive unless Connection: close
                 self.header("connection")
-                    .map(|v| !v.eq_ignore_ascii_case("close"))
-                    .unwrap_or(true)
+                    .map_or(true, |v| !v.eq_ignore_ascii_case("close"))
             },
             Version::HTTP_10 => {
                 // Default to close unless Connection: keep-alive
                 self.header("connection")
-                    .map(|v| v.eq_ignore_ascii_case("keep-alive"))
-                    .unwrap_or(false)
+                    .is_some_and(|v| v.eq_ignore_ascii_case("keep-alive"))
             },
             _ => false,
         }
     }
 
     /// Parse a request from bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data is not a valid HTTP request.
     pub fn parse(data: &[u8]) -> HttpResult<(Self, usize)> {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
         let mut req = httparse::Request::new(&mut headers);
@@ -164,7 +169,6 @@ impl Request {
 
                 let version = match req.version {
                     Some(0) => Version::HTTP_10,
-                    Some(1) => Version::HTTP_11,
                     _ => Version::HTTP_11,
                 };
 
@@ -198,7 +202,6 @@ impl Request {
         // Request line
         let version_str = match self.version {
             Version::HTTP_10 => "HTTP/1.0",
-            Version::HTTP_11 => "HTTP/1.1",
             Version::HTTP_2 => "HTTP/2.0",
             _ => "HTTP/1.1",
         };
@@ -208,7 +211,7 @@ impl Request {
 
         // Headers
         for (name, value) in &self.headers {
-            buf.extend_from_slice(format!("{}: {}\r\n", name, value).as_bytes());
+            buf.extend_from_slice(format!("{name}: {value}\r\n").as_bytes());
         }
 
         // End of headers
@@ -246,24 +249,31 @@ impl RequestBuilder {
     }
 
     /// Set the HTTP method.
+    #[must_use]
     pub fn method(mut self, method: Method) -> Self {
         self.method = Some(method);
         self
     }
 
     /// Set the request URI.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the URI string is invalid.
     pub fn uri(mut self, uri: impl Into<String>) -> HttpResult<Self> {
         self.uri = Some(Uri::from_str(&uri.into())?);
         Ok(self)
     }
 
     /// Set the HTTP version.
+    #[must_use]
     pub fn version(mut self, version: Version) -> Self {
         self.version = version;
         self
     }
 
     /// Add a header.
+    #[must_use]
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers
             .insert(name.into().to_lowercase(), value.into());
@@ -271,24 +281,31 @@ impl RequestBuilder {
     }
 
     /// Set the request body.
+    #[must_use]
     pub fn body(mut self, body: impl Into<Bytes>) -> Self {
         self.body = body.into();
         self
     }
 
     /// Set the remote address.
+    #[must_use]
     pub fn remote_addr(mut self, addr: impl Into<String>) -> Self {
         self.remote_addr = Some(addr.into());
         self
     }
 
     /// Set the request ID.
+    #[must_use]
     pub fn request_id(mut self, id: impl Into<String>) -> Self {
         self.request_id = Some(id.into());
         self
     }
 
     /// Build the request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request cannot be constructed.
     pub fn build(self) -> HttpResult<Request> {
         Ok(Request {
             method: self.method.unwrap_or(Method::GET),

@@ -1,14 +1,14 @@
 //! # MQTT Handler Module
 //!
 //! This module provides MQTT 3.1.1 and MQTT 5.0 protocol handling for R0N Gateway.
-//! It supports topic-based routing, QoS handling, and session management.
+//! It supports topic-based routing, `QoS` handling, and session management.
 //!
 //! ## Features
 //!
 //! - MQTT 3.1.1 protocol support
 //! - MQTT 5.0 protocol support
 //! - Topic-based routing with wildcards
-//! - QoS 0, 1, and 2 handling
+//! - `QoS` 0, 1, and 2 handling
 //! - Session management
 //! - Will message support
 //! - Clean session handling

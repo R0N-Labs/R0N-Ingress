@@ -84,6 +84,10 @@ impl AccessControlConfig {
     }
 
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if any sub-configuration is invalid.
     pub fn validate(&self) -> Result<(), String> {
         if let Some(ref ip_filter) = self.ip_filter {
             ip_filter.validate()?;
@@ -102,7 +106,7 @@ impl AccessControlConfig {
 }
 
 /// Action to take for an access control rule.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum RuleAction {
     /// Allow the request.
@@ -171,6 +175,10 @@ impl Default for IpFilterConfig {
 
 impl IpFilterConfig {
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if any IP filter rule is invalid.
     pub fn validate(&self) -> Result<(), String> {
         for (i, rule) in self.rules.iter().enumerate() {
             rule.validate()
@@ -236,6 +244,10 @@ impl IpRule {
     }
 
     /// Validate the rule.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if addresses are empty or contain invalid entries.
     pub fn validate(&self) -> Result<(), String> {
         if self.addresses.is_empty() {
             return Err("addresses cannot be empty".to_string());
@@ -304,6 +316,11 @@ impl Default for AuthConfig {
 
 impl AuthConfig {
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if auth is required but no providers are configured,
+    /// or if any provider configuration is invalid.
     pub fn validate(&self) -> Result<(), String> {
         if self.required && self.providers.is_empty() {
             return Err("auth.required is true but no providers configured".to_string());
@@ -395,6 +412,10 @@ fn default_auth_timeout() -> u64 {
 
 impl AuthProvider {
     /// Validate the provider configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the provider is misconfigured.
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Self::Basic { users, .. } => {
@@ -497,6 +518,10 @@ impl Default for PolicyConfig {
 
 impl PolicyConfig {
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if any policy rule is invalid.
     pub fn validate(&self) -> Result<(), String> {
         for (i, rule) in self.rules.iter().enumerate() {
             rule.validate()
@@ -579,6 +604,10 @@ impl PolicyRule {
     }
 
     /// Validate the rule.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the rule name is empty.
     pub fn validate(&self) -> Result<(), String> {
         if self.name.is_empty() {
             return Err("rule name cannot be empty".to_string());

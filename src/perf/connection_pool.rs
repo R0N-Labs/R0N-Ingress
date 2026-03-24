@@ -10,7 +10,7 @@ use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 /// Connection pool configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PoolConfig {
     /// Minimum number of connections.
     pub min_size: usize,
@@ -47,59 +47,72 @@ impl Default for PoolConfig {
 
 impl PoolConfig {
     /// Create a new pool configuration.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set minimum size.
+    #[must_use]
     pub fn min_size(mut self, size: usize) -> Self {
         self.min_size = size;
         self
     }
 
     /// Set maximum size.
+    #[must_use]
     pub fn max_size(mut self, size: usize) -> Self {
         self.max_size = size;
         self
     }
 
     /// Set idle timeout.
+    #[must_use]
     pub fn idle_timeout(mut self, timeout: Duration) -> Self {
         self.idle_timeout = timeout;
         self
     }
 
     /// Set maximum lifetime.
+    #[must_use]
     pub fn max_lifetime(mut self, lifetime: Duration) -> Self {
         self.max_lifetime = lifetime;
         self
     }
 
     /// Set acquire timeout.
+    #[must_use]
     pub fn acquire_timeout(mut self, timeout: Duration) -> Self {
         self.acquire_timeout = timeout;
         self
     }
 
     /// Set health check interval.
+    #[must_use]
     pub fn health_check_interval(mut self, interval: Duration) -> Self {
         self.health_check_interval = interval;
         self
     }
 
     /// Enable/disable adaptive sizing.
+    #[must_use]
     pub fn adaptive(mut self, enabled: bool) -> Self {
         self.adaptive = enabled;
         self
     }
 
     /// Set target utilization.
+    #[must_use]
     pub fn target_utilization(mut self, util: f64) -> Self {
         self.target_utilization = util.clamp(0.1, 1.0);
         self
     }
 
     /// Validate configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid.
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.min_size > self.max_size {
             return Err("min_size cannot exceed max_size");
@@ -138,7 +151,8 @@ pub struct PoolMetrics {
 }
 
 impl PoolMetrics {
-    /// Get utilization (in_use / current_size).
+    /// Get utilization (`in_use` / `current_size`).
+    #[allow(clippy::cast_precision_loss)]
     pub fn utilization(&self) -> f64 {
         let size = self.current_size.load(Ordering::Relaxed);
         let used = self.in_use.load(Ordering::Relaxed);
@@ -161,6 +175,7 @@ impl PoolMetrics {
     }
 
     /// Get acquire success rate.
+    #[allow(clippy::cast_precision_loss)]
     pub fn success_rate(&self) -> f64 {
         let attempts = self.acquire_attempts.load(Ordering::Relaxed);
         let success = self.acquire_success.load(Ordering::Relaxed);
@@ -244,7 +259,7 @@ impl<T> fmt::Debug for PooledConnection<T> {
             .field("age", &self.age())
             .field("idle_time", &self.idle_time())
             .field("valid", &self.valid)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -320,8 +335,8 @@ impl fmt::Display for PoolError {
         match self {
             Self::Timeout => write!(f, "connection acquire timeout"),
             Self::Closed => write!(f, "pool is closed"),
-            Self::CreateFailed(e) => write!(f, "failed to create connection: {}", e),
-            Self::InvalidConfig(msg) => write!(f, "invalid configuration: {}", msg),
+            Self::CreateFailed(e) => write!(f, "failed to create connection: {e}"),
+            Self::InvalidConfig(msg) => write!(f, "invalid configuration: {msg}"),
         }
     }
 }
@@ -335,6 +350,10 @@ pub struct ConnectionPool<T> {
 
 impl<T: Send + 'static> ConnectionPool<T> {
     /// Create a new connection pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid or initial connections cannot be created.
     pub fn new<F>(config: PoolConfig, factory: F) -> Result<Self, PoolError>
     where
         F: Fn() -> Result<T, Box<dyn std::error::Error + Send + Sync>> + Send + Sync + 'static,
@@ -342,7 +361,7 @@ impl<T: Send + 'static> ConnectionPool<T> {
         config.validate().map_err(PoolError::InvalidConfig)?;
 
         let inner = Arc::new(ConnectionPoolInner {
-            config: config.clone(),
+            config,
             available: Mutex::new(VecDeque::with_capacity(config.max_size)),
             condvar: Condvar::new(),
             metrics: PoolMetrics::default(),
@@ -383,6 +402,11 @@ impl<T: Send + 'static> ConnectionPool<T> {
     }
 
     /// Acquire a connection from the pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool is closed, the acquire times out, or a new connection cannot be created.
+    #[allow(clippy::too_many_lines, clippy::cast_possible_truncation)]
     pub fn acquire(&self) -> Result<PooledConnection<T>, PoolError> {
         if self.inner.closed.load(Ordering::Relaxed) {
             return Err(PoolError::Closed);
@@ -523,6 +547,7 @@ impl<T: Send + 'static> ConnectionPool<T> {
     }
 
     /// Try to acquire without waiting.
+    #[must_use]
     pub fn try_acquire(&self) -> Option<PooledConnection<T>> {
         if self.inner.closed.load(Ordering::Relaxed) {
             return None;
@@ -563,16 +588,19 @@ impl<T: Send + 'static> ConnectionPool<T> {
     }
 
     /// Get pool metrics.
+    #[must_use]
     pub fn metrics(&self) -> &PoolMetrics {
         &self.inner.metrics
     }
 
     /// Get current pool size.
+    #[must_use]
     pub fn size(&self) -> usize {
         self.inner.metrics.current_size.load(Ordering::Relaxed)
     }
 
     /// Get available connection count.
+    #[must_use]
     pub fn available(&self) -> usize {
         self.inner.available.lock().map(|a| a.len()).unwrap_or(0)
     }
@@ -592,6 +620,7 @@ impl<T: Send + 'static> ConnectionPool<T> {
     }
 
     /// Check if pool is closed.
+    #[must_use]
     pub fn is_closed(&self) -> bool {
         self.inner.closed.load(Ordering::Relaxed)
     }
@@ -658,6 +687,10 @@ impl Default for AdaptiveTuning {
 
 impl<T: Send + 'static> AdaptivePool<T> {
     /// Create a new adaptive pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid or initial connections cannot be created.
     pub fn new<F>(config: PoolConfig, factory: F) -> Result<Self, PoolError>
     where
         F: Fn() -> Result<T, Box<dyn std::error::Error + Send + Sync>> + Send + Sync + 'static,
@@ -670,6 +703,10 @@ impl<T: Send + 'static> AdaptivePool<T> {
     }
 
     /// Create with custom tuning.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid or initial connections cannot be created.
     pub fn with_tuning<F>(
         config: PoolConfig,
         factory: F,
@@ -686,6 +723,10 @@ impl<T: Send + 'static> AdaptivePool<T> {
     }
 
     /// Acquire a connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool is closed, the acquire times out, or a new connection cannot be created.
     pub fn acquire(&self) -> Result<PooledConnection<T>, PoolError> {
         let conn = self.pool.acquire()?;
         self.maybe_adjust();
@@ -722,17 +763,17 @@ impl<T: Send + 'static> AdaptivePool<T> {
             if utilization > tuning.scale_up_threshold && current < max {
                 // Would scale up, but we can't actually resize the pool
                 // This is just for demonstration
-                let _new_target = (current + 1).min(max);
+                let new_target = (current + 1).min(max);
                 self.pool
                     .inner
                     .target_size
-                    .store(_new_target, Ordering::Relaxed);
+                    .store(new_target, Ordering::Relaxed);
             } else if utilization < tuning.scale_down_threshold && current > min {
-                let _new_target = (current - 1).max(min);
+                let new_target = (current - 1).max(min);
                 self.pool
                     .inner
                     .target_size
-                    .store(_new_target, Ordering::Relaxed);
+                    .store(new_target, Ordering::Relaxed);
             }
         }
     }
@@ -764,7 +805,7 @@ impl<T> fmt::Debug for AdaptivePool<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AdaptivePool")
             .field("pool", &self.pool)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -783,6 +824,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::AtomicU32;
 
+    #[allow(clippy::unnecessary_wraps)]
     fn test_factory() -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         Ok(COUNTER.fetch_add(1, Ordering::Relaxed))
@@ -885,8 +927,8 @@ mod tests {
         let config = PoolConfig::new().min_size(1).max_size(5);
         let pool = ConnectionPool::new(config, test_factory).unwrap();
 
-        let _conn = pool.acquire().unwrap();
-        drop(_conn);
+        let conn = pool.acquire().unwrap();
+        drop(conn);
 
         assert!(pool.metrics().acquire_success.load(Ordering::Relaxed) >= 1);
     }

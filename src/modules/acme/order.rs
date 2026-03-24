@@ -72,6 +72,7 @@ pub struct Order {
 
 impl Order {
     /// Create a new order
+    #[must_use]
     pub fn new(
         url: String,
         identifiers: Vec<Identifier>,
@@ -97,26 +98,31 @@ impl Order {
     }
 
     /// Check if order is pending
+    #[must_use]
     pub fn is_pending(&self) -> bool {
         matches!(self.status, OrderStatus::Pending)
     }
 
     /// Check if order is ready for finalization
+    #[must_use]
     pub fn is_ready(&self) -> bool {
         matches!(self.status, OrderStatus::Ready)
     }
 
     /// Check if order is complete
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         matches!(self.status, OrderStatus::Valid)
     }
 
     /// Check if order failed
+    #[must_use]
     pub fn is_invalid(&self) -> bool {
         matches!(self.status, OrderStatus::Invalid)
     }
 
     /// Check if order is expired
+    #[must_use]
     pub fn is_expired(&self) -> bool {
         if let Some(expires) = self.expires {
             let now = SystemTime::now()
@@ -130,6 +136,7 @@ impl Order {
     }
 
     /// Get domains from identifiers
+    #[must_use]
     pub fn domains(&self) -> Vec<&str> {
         self.identifiers
             .iter()
@@ -144,6 +151,7 @@ impl Order {
     }
 
     /// Get time until expiry
+    #[must_use]
     pub fn time_until_expiry(&self) -> Option<Duration> {
         self.expires.and_then(|expires| {
             let now = SystemTime::now()
@@ -246,6 +254,7 @@ pub struct Authorization {
 
 impl Authorization {
     /// Create a new authorization
+    #[must_use]
     pub fn new(url: String, identifier: Identifier, challenges: Vec<Challenge>) -> Self {
         Self {
             url,
@@ -258,21 +267,25 @@ impl Authorization {
     }
 
     /// Check if authorization is pending
+    #[must_use]
     pub fn is_pending(&self) -> bool {
         matches!(self.status, AuthorizationStatus::Pending)
     }
 
     /// Check if authorization is valid
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         matches!(self.status, AuthorizationStatus::Valid)
     }
 
     /// Get the domain being authorized
+    #[must_use]
     pub fn domain(&self) -> &str {
         &self.identifier.value
     }
 
     /// Get a challenge by type
+    #[must_use]
     pub fn get_challenge(&self, challenge_type: ChallengeType) -> Option<&Challenge> {
         self.challenges
             .iter()
@@ -280,16 +293,19 @@ impl Authorization {
     }
 
     /// Get HTTP-01 challenge if available
+    #[must_use]
     pub fn http01_challenge(&self) -> Option<&Challenge> {
         self.get_challenge(ChallengeType::Http01)
     }
 
     /// Get DNS-01 challenge if available
+    #[must_use]
     pub fn dns01_challenge(&self) -> Option<&Challenge> {
         self.get_challenge(ChallengeType::Dns01)
     }
 
     /// Get available challenge types
+    #[must_use]
     pub fn available_challenge_types(&self) -> Vec<ChallengeType> {
         self.challenges.iter().map(|c| c.challenge_type).collect()
     }
@@ -364,8 +380,7 @@ impl OrderBuilder {
         for c in domain.chars() {
             if !c.is_ascii_alphanumeric() && c != '.' && c != '-' && c != '*' {
                 return Err(AcmeError::DomainValidation(format!(
-                    "Invalid character '{}' in domain",
-                    c
+                    "Invalid character '{c}' in domain"
                 )));
             }
         }

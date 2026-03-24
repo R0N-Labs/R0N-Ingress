@@ -1,6 +1,6 @@
 //! Plugin handler.
 //!
-//! Implements the ModuleContract for the plugin system, providing
+//! Implements the `ModuleContract` for the plugin system, providing
 //! module lifecycle management and metrics.
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,7 +16,7 @@ use super::registry::{PluginInfo, PluginRegistry, PluginState, PluginType};
 use super::runtime::{PluginRuntime, RuntimeConfig, WasmValue};
 use super::sandbox::SandboxConfig;
 
-/// Plugin handler implementing ModuleContract.
+/// Plugin handler implementing `ModuleContract`.
 #[derive(Debug)]
 pub struct PluginHandler {
     /// Plugin runtime.
@@ -41,6 +41,7 @@ impl Default for PluginHandler {
 
 impl PluginHandler {
     /// Create a new plugin handler.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             runtime: PluginRuntime::new(),
@@ -53,6 +54,7 @@ impl PluginHandler {
     }
 
     /// Create with configuration.
+    #[must_use]
     pub fn with_config(config: PluginHandlerConfig) -> Self {
         Self {
             runtime: PluginRuntime::with_config(config.runtime.clone()),
@@ -82,6 +84,10 @@ impl PluginHandler {
     }
 
     /// Load and register a plugin.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the WASM module cannot be loaded or registration fails.
     pub fn load_plugin(
         &mut self,
         name: impl Into<String>,
@@ -107,6 +113,10 @@ impl PluginHandler {
     }
 
     /// Unload a plugin.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin is not found or cannot be unloaded.
     pub fn unload_plugin(&mut self, name: &str) -> PluginResult<()> {
         // Unload from runtime
         self.runtime.unload_module(name)?;
@@ -119,6 +129,10 @@ impl PluginHandler {
     }
 
     /// Start a plugin instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin is not found or not in a startable state.
     pub fn start_plugin(&mut self, name: &str) -> PluginResult<u64> {
         let entry = self
             .registry
@@ -153,12 +167,16 @@ impl PluginHandler {
     }
 
     /// Stop a plugin instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the instance is not found or cannot be stopped.
     pub fn stop_plugin(&mut self, instance_id: u64) -> PluginResult<()> {
         let instance =
             self.runtime
                 .get_instance(instance_id)
                 .ok_or_else(|| PluginError::NotFound {
-                    name: format!("instance:{}", instance_id),
+                    name: format!("instance:{instance_id}"),
                 })?;
 
         let module_name = instance.module_name.clone();
@@ -176,6 +194,10 @@ impl PluginHandler {
     }
 
     /// Invoke a plugin function.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the invocation fails or the instance is not found.
     pub fn invoke(
         &mut self,
         instance_id: u64,
@@ -273,7 +295,7 @@ impl ModuleContract for PluginHandler {
             for name in plugin_names {
                 if let Err(e) = self.start_plugin(&name) {
                     // Log error but continue
-                    eprintln!("Failed to auto-start plugin {}: {:?}", name, e);
+                    eprintln!("Failed to auto-start plugin {name}: {e:?}");
                 }
             }
         }
@@ -295,7 +317,7 @@ impl ModuleContract for PluginHandler {
             self.registry
                 .update_state(&name, PluginState::Stopped)
                 .map_err(|e| {
-                    ModuleError::StopFailed(format!("Failed to stop plugin {}: {}", name, e))
+                    ModuleError::StopFailed(format!("Failed to stop plugin {name}: {e}"))
                 })?;
         }
 
@@ -311,6 +333,7 @@ impl ModuleContract for PluginHandler {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 

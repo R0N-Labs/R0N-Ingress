@@ -16,7 +16,7 @@ pub struct ConnectionTracker {
     /// Next connection ID.
     next_id: AtomicU64,
 
-    /// UDP sessions by (client_addr, listener).
+    /// UDP sessions by (`client_addr`, listener).
     udp_sessions: RwLock<HashMap<(SocketAddr, String), UdpSession>>,
 
     /// Connection count per client IP.
@@ -113,6 +113,7 @@ impl Default for ConnectionTracker {
 
 impl ConnectionTracker {
     /// Create a new connection tracker.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             connections: RwLock::new(HashMap::new()),
@@ -128,6 +129,10 @@ impl ConnectionTracker {
     }
 
     /// Track a new TCP connection.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn track_connection(
         &self,
         client_addr: SocketAddr,
@@ -151,6 +156,10 @@ impl ConnectionTracker {
     }
 
     /// Update connection state.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn update_state(&self, id: u64, state: ConnectionState) {
         let mut connections = self.connections.write().unwrap();
         if let Some(conn) = connections.get_mut(&id) {
@@ -160,6 +169,10 @@ impl ConnectionTracker {
     }
 
     /// Update connection bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn update_bytes(&self, id: u64, to_client: u64, to_backend: u64) {
         let mut connections = self.connections.write().unwrap();
         if let Some(conn) = connections.get_mut(&id) {
@@ -170,6 +183,10 @@ impl ConnectionTracker {
     }
 
     /// Remove a tracked connection.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn remove_connection(&self, id: u64) -> Option<ConnectionInfo> {
         let conn = {
             let mut connections = self.connections.write().unwrap();
@@ -190,6 +207,10 @@ impl ConnectionTracker {
     }
 
     /// Get connection info.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn get_connection(&self, id: u64) -> Option<ConnectionInfo> {
         let connections = self.connections.read().unwrap();
         connections.get(&id).map(|c| ConnectionInfo {
@@ -206,11 +227,19 @@ impl ConnectionTracker {
     }
 
     /// Get number of active connections.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn active_connections(&self) -> usize {
         self.connections.read().unwrap().len()
     }
 
     /// Get connections per IP for a specific IP.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn connections_for_ip(&self, ip: std::net::IpAddr) -> usize {
         self.connections_per_ip
             .read()
@@ -221,6 +250,10 @@ impl ConnectionTracker {
     }
 
     /// Get or create a UDP session.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn get_or_create_udp_session(
         &self,
         client_addr: SocketAddr,
@@ -248,6 +281,10 @@ impl ConnectionTracker {
     }
 
     /// Update UDP session activity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn touch_udp_session(&self, client_addr: SocketAddr, listener: &str) {
         let key = (client_addr, listener.to_string());
         let mut sessions = self.udp_sessions.write().unwrap();
@@ -257,6 +294,10 @@ impl ConnectionTracker {
     }
 
     /// Update UDP session stats.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn update_udp_session_stats(
         &self,
         client_addr: SocketAddr,
@@ -278,6 +319,10 @@ impl ConnectionTracker {
     }
 
     /// Get UDP session by client address and listener.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn get_udp_session(&self, client_addr: SocketAddr, listener: &str) -> Option<SocketAddr> {
         let key = (client_addr, listener.to_string());
         let sessions = self.udp_sessions.read().unwrap();
@@ -285,6 +330,10 @@ impl ConnectionTracker {
     }
 
     /// Cleanup expired UDP sessions.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn cleanup_expired_udp_sessions(&self, timeout: Duration) -> usize {
         let mut sessions = self.udp_sessions.write().unwrap();
         let before = sessions.len();
@@ -293,11 +342,19 @@ impl ConnectionTracker {
     }
 
     /// Get number of active UDP sessions.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn active_udp_sessions(&self) -> usize {
         self.udp_sessions.read().unwrap().len()
     }
 
     /// Cleanup idle TCP connections.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn cleanup_idle_connections(&self, timeout: Duration) -> usize {
         let mut to_remove = Vec::new();
 
@@ -318,6 +375,10 @@ impl ConnectionTracker {
     }
 
     /// Get all connection info (for monitoring).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal lock is poisoned.
     pub fn all_connections(&self) -> Vec<ConnectionInfo> {
         let connections = self.connections.read().unwrap();
         connections
@@ -343,7 +404,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
     fn make_addr(port: u16) -> SocketAddr {
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port)
     }
 
     #[test]

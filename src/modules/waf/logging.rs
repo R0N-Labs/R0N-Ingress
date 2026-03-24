@@ -125,6 +125,10 @@ pub struct DetectorFinding {
 /// Trait for threat loggers
 pub trait ThreatLogger: Send + Sync {
     /// Log a threat entry
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if logging fails.
     fn log(&self, entry: ThreatLogEntry) -> WafResult<()>;
 
     /// Get recent entries
@@ -151,6 +155,7 @@ pub struct ThreatLog {
 
 impl ThreatLog {
     /// Create new threat log with config
+    #[must_use]
     pub fn new(config: ThreatLogConfig) -> Self {
         Self {
             config,
@@ -159,11 +164,13 @@ impl ThreatLog {
     }
 
     /// Create with default config
+    #[must_use]
     pub fn default_config() -> Self {
         Self::new(ThreatLogConfig::default())
     }
 
     /// Create a log entry from scan result
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn create_entry(
         &self,
         result: &ScanResult,
@@ -201,8 +208,8 @@ impl ThreatLog {
             source_ip,
             method: method.to_string(),
             uri: uri.to_string(),
-            query_string: query_string.map(|s| s.to_string()),
-            user_agent: user_agent.map(|s| s.to_string()),
+            query_string: query_string.map(std::string::ToString::to_string),
+            user_agent: user_agent.map(std::string::ToString::to_string),
             blocked: result.blocked,
             matched_rules,
             detector_findings,
@@ -222,17 +229,16 @@ impl ThreatLog {
     pub fn format_entry(&self, entry: &ThreatLogEntry) -> String {
         match self.config.format {
             LogFormat::Json => serde_json::to_string(entry).unwrap_or_default(),
-            LogFormat::Clf => self.format_clf(entry),
-            LogFormat::Elf => self.format_elf(entry),
+            LogFormat::Clf => Self::format_clf(entry),
+            LogFormat::Elf => Self::format_elf(entry),
         }
     }
 
-    fn format_clf(&self, entry: &ThreatLogEntry) -> String {
+    fn format_clf(entry: &ThreatLogEntry) -> String {
         // Common Log Format: host ident authuser date request status bytes
         let ip = entry
             .source_ip
-            .map(|ip| ip.to_string())
-            .unwrap_or_else(|| "-".to_string());
+            .map_or_else(|| "-".to_string(), |ip| ip.to_string());
         let timestamp = format_timestamp(entry.timestamp);
         let status = if entry.blocked { 403 } else { 200 };
 
@@ -247,12 +253,11 @@ impl ThreatLog {
         )
     }
 
-    fn format_elf(&self, entry: &ThreatLogEntry) -> String {
+    fn format_elf(entry: &ThreatLogEntry) -> String {
         // Extended Log Format with more details
         let ip = entry
             .source_ip
-            .map(|ip| ip.to_string())
-            .unwrap_or_else(|| "-".to_string());
+            .map_or_else(|| "-".to_string(), |ip| ip.to_string());
         let timestamp = format_timestamp(entry.timestamp);
         let status = if entry.blocked { 403 } else { 200 };
         let rules = entry
@@ -287,7 +292,11 @@ impl ThreatLog {
     }
 
     /// Send alert (webhook)
-    pub async fn send_alert(&self, entry: &ThreatLogEntry) -> WafResult<()> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the webhook request fails.
+    pub fn send_alert(&self, entry: &ThreatLogEntry) -> WafResult<()> {
         let Some(webhook_url) = &self.config.alert_webhook else {
             return Ok(());
         };
@@ -337,7 +346,7 @@ impl ThreatLogger for ThreatLog {
             {
                 use std::io::Write;
                 let formatted = self.format_entry(&entry);
-                let _ = writeln!(file, "{}", formatted);
+                let _ = writeln!(file, "{formatted}");
             }
         }
 
@@ -398,13 +407,15 @@ fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
+#[allow(clippy::cast_possible_wrap)]
 fn format_timestamp(millis: u64) -> String {
     // Simple timestamp format
     let secs = millis / 1000;
     let datetime = chrono::DateTime::from_timestamp(secs as i64, 0);
-    datetime
-        .map(|dt| dt.format("%d/%b/%Y:%H:%M:%S %z").to_string())
-        .unwrap_or_else(|| format!("{}", millis))
+    datetime.map_or_else(
+        || format!("{millis}"),
+        |dt| dt.format("%d/%b/%Y:%H:%M:%S %z").to_string(),
+    )
 }
 
 #[cfg(test)]
@@ -488,7 +499,7 @@ mod tests {
 
             let entry = log.create_entry(
                 &result,
-                &format!("req-{}", i),
+                &format!("req-{i}"),
                 None,
                 "GET",
                 "/test",
@@ -531,7 +542,7 @@ mod tests {
             let result = ScanResult::blocked("test");
             let entry = log.create_entry(
                 &result,
-                &format!("req-{}", i),
+                &format!("req-{i}"),
                 Some(ip),
                 "GET",
                 "/",
@@ -565,7 +576,7 @@ mod tests {
             None,
         );
 
-        let formatted = log.format_clf(&entry);
+        let formatted = ThreatLog::format_clf(&entry);
         assert!(formatted.contains("192.168.1.1"));
         assert!(formatted.contains("GET /api/users"));
         assert!(formatted.contains("403")); // Blocked
@@ -588,7 +599,7 @@ mod tests {
             None,
         );
 
-        let formatted = log.format_elf(&entry);
+        let formatted = ThreatLog::format_elf(&entry);
         assert!(formatted.contains("192.168.1.1"));
         assert!(formatted.contains("score=10"));
         assert!(formatted.contains("942100")); // Rule ID

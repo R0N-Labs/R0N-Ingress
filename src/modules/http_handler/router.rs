@@ -35,6 +35,10 @@ pub struct Route {
 
 impl Route {
     /// Create a route from configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the route configuration is invalid.
     pub fn from_config(config: RouteConfig) -> HttpResult<Self> {
         let methods = config
             .methods
@@ -177,6 +181,10 @@ enum PathSegment {
 
 impl PathPattern {
     /// Compile a path pattern.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pattern syntax is invalid.
     pub fn compile(pattern: &str) -> HttpResult<Self> {
         let pattern = if pattern.is_empty() { "/" } else { pattern };
         let mut segments = Vec::new();
@@ -243,8 +251,9 @@ impl PathPattern {
         let mut count = 0;
         for seg in &self.segments {
             match seg {
-                PathSegment::Literal(_) => count += 1,
-                PathSegment::Wildcard | PathSegment::Param(_) => count += 1,
+                PathSegment::Literal(_) | PathSegment::Wildcard | PathSegment::Param(_) => {
+                    count += 1;
+                },
                 PathSegment::GlobStar => break,
             }
         }
@@ -315,6 +324,10 @@ impl Router {
     }
 
     /// Create a router from route configurations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any route configuration is invalid.
     pub fn from_configs(
         configs: Vec<RouteConfig>,
         default_backend: Option<BackendConfig>,
@@ -364,6 +377,10 @@ impl Router {
     }
 
     /// Find a matching route or return the default backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no matching route or default backend is found.
     pub fn route_or_default(
         &self,
         request: &Request,

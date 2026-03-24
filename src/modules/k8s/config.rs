@@ -44,11 +44,13 @@ impl Default for K8sConfig {
 
 impl K8sConfig {
     /// Create a new configuration with default settings.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Create configuration for in-cluster deployment.
+    #[must_use]
     pub fn in_cluster() -> Self {
         Self {
             cluster: ClusterConfig::in_cluster(),
@@ -61,6 +63,8 @@ impl K8sConfig {
     }
 
     /// Create configuration from kubeconfig file.
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
     pub fn from_kubeconfig(path: PathBuf) -> Self {
         Self {
             auth: AuthConfig::Kubeconfig {
@@ -72,53 +76,65 @@ impl K8sConfig {
     }
 
     /// Set the cluster configuration.
+    #[must_use]
     pub fn with_cluster(mut self, cluster: ClusterConfig) -> Self {
         self.cluster = cluster;
         self
     }
 
     /// Set the authentication configuration.
+    #[must_use]
     pub fn with_auth(mut self, auth: AuthConfig) -> Self {
         self.auth = auth;
         self
     }
 
     /// Set the default namespace.
+    #[must_use]
     pub fn with_namespace(mut self, namespace: impl Into<String>) -> Self {
         self.namespace = Some(namespace.into());
         self
     }
 
     /// Set the watch configuration.
+    #[must_use]
     pub fn with_watch(mut self, watch: WatchConfig) -> Self {
         self.watch = watch;
         self
     }
 
     /// Set the request timeout.
+    #[must_use]
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
     /// Enable leader election.
+    #[must_use]
     pub fn with_leader_election(mut self, enabled: bool) -> Self {
         self.leader_election = enabled;
         self
     }
 
     /// Set the leader election lease name.
+    #[must_use]
     pub fn with_lease_name(mut self, name: impl Into<String>) -> Self {
         self.lease_name = name.into();
         self
     }
 
     /// Get the effective namespace, defaulting to "default" if not set.
+    #[must_use]
     pub fn effective_namespace(&self) -> &str {
         self.namespace.as_deref().unwrap_or("default")
     }
 
     /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid.
     pub fn validate(&self) -> Result<(), ConfigValidationError> {
         if self.cluster.api_server_url.is_empty() {
             return Err(ConfigValidationError::MissingApiServer);
@@ -162,6 +178,7 @@ impl Default for ClusterConfig {
 
 impl ClusterConfig {
     /// Create configuration for in-cluster deployment.
+    #[must_use]
     pub fn in_cluster() -> Self {
         Self {
             api_server_url: format!(
@@ -188,24 +205,28 @@ impl ClusterConfig {
     }
 
     /// Set the CA certificate.
+    #[must_use]
     pub fn with_ca_cert(mut self, cert: CertificateSource) -> Self {
         self.ca_cert = Some(cert);
         self
     }
 
     /// Enable insecure TLS (skip verification).
+    #[must_use]
     pub fn insecure(mut self) -> Self {
         self.insecure_skip_tls_verify = true;
         self
     }
 
     /// Set the TLS server name.
+    #[must_use]
     pub fn with_tls_server_name(mut self, name: impl Into<String>) -> Self {
         self.tls_server_name = Some(name.into());
         self
     }
 
     /// Set the proxy URL.
+    #[must_use]
     pub fn with_proxy(mut self, url: impl Into<String>) -> Self {
         self.proxy_url = Some(url.into());
         self
@@ -277,6 +298,7 @@ impl AuthConfig {
     }
 
     /// Create service account authentication.
+    #[must_use]
     pub fn service_account() -> Self {
         Self::ServiceAccount {
             token_path: PathBuf::from("/var/run/secrets/kubernetes.io/serviceaccount/token"),
@@ -284,11 +306,13 @@ impl AuthConfig {
     }
 
     /// Create client certificate authentication.
+    #[must_use]
     pub fn client_certificate(cert: CertificateSource, key: CertificateSource) -> Self {
         Self::ClientCertificate { cert, key }
     }
 
     /// Create kubeconfig authentication.
+    #[must_use]
     pub fn kubeconfig(path: PathBuf) -> Self {
         Self::Kubeconfig {
             path,
@@ -297,9 +321,12 @@ impl AuthConfig {
     }
 
     /// Validate the authentication configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the authentication settings are invalid.
     pub fn validate(&self) -> Result<(), ConfigValidationError> {
         match self {
-            Self::None => Ok(()),
             Self::Token(token) => {
                 if token.is_empty() {
                     Err(ConfigValidationError::EmptyToken)
@@ -308,20 +335,20 @@ impl AuthConfig {
                 }
             },
             Self::ServiceAccount { token_path } => {
-                if !token_path.exists() {
+                if token_path.exists() {
+                    Ok(())
+                } else {
                     // In tests or dev, file might not exist
                     // Just validate path is set
                     Ok(())
-                } else {
-                    Ok(())
                 }
             },
-            Self::ClientCertificate { .. } => Ok(()),
+            Self::None | Self::ClientCertificate { .. } => Ok(()),
             Self::Kubeconfig { path, .. } => {
-                if !path.exists() {
-                    // In tests or dev, file might not exist
+                if path.exists() {
                     Ok(())
                 } else {
+                    // In tests or dev, file might not exist
                     Ok(())
                 }
             },
@@ -349,6 +376,7 @@ impl AuthConfig {
     }
 
     /// Check if this is in-cluster authentication.
+    #[must_use]
     pub fn is_in_cluster(&self) -> bool {
         matches!(self, Self::ServiceAccount { .. })
     }
@@ -383,35 +411,41 @@ impl Default for WatchConfig {
 
 impl WatchConfig {
     /// Create a new watch configuration.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the initial resource version.
+    #[must_use]
     pub fn with_resource_version(mut self, version: impl Into<String>) -> Self {
         self.resource_version = Some(version.into());
         self
     }
 
     /// Set the watch timeout.
+    #[must_use]
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
     /// Set whether to allow bookmarks.
+    #[must_use]
     pub fn with_bookmarks(mut self, allow: bool) -> Self {
         self.allow_bookmarks = allow;
         self
     }
 
     /// Set the backoff configuration.
+    #[must_use]
     pub fn with_backoff(mut self, backoff: BackoffConfig) -> Self {
         self.backoff = backoff;
         self
     }
 
     /// Set the event buffer size.
+    #[must_use]
     pub fn with_buffer_size(mut self, size: usize) -> Self {
         self.buffer_size = size;
         self
@@ -444,6 +478,7 @@ impl Default for BackoffConfig {
 
 impl BackoffConfig {
     /// Calculate the next backoff duration.
+    #[must_use]
     pub fn next_backoff(&self, current: Duration) -> Duration {
         let next = Duration::from_secs_f64(current.as_secs_f64() * self.multiplier);
         std::cmp::min(next, self.max)
@@ -493,28 +528,32 @@ pub struct LabelSelector {
 
 impl LabelSelector {
     /// Create a new empty label selector.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Add an equality match.
+    #[must_use]
     pub fn with_label(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.match_labels.push((key.into(), value.into()));
         self
     }
 
     /// Add a match expression.
+    #[must_use]
     pub fn with_expression(mut self, expr: LabelSelectorRequirement) -> Self {
         self.match_expressions.push(expr);
         self
     }
 
     /// Convert to Kubernetes label selector string.
+    #[must_use]
     pub fn to_selector_string(&self) -> String {
         let mut parts = Vec::new();
 
         for (key, value) in &self.match_labels {
-            parts.push(format!("{}={}", key, value));
+            parts.push(format!("{key}={value}"));
         }
 
         for expr in &self.match_expressions {
@@ -525,6 +564,7 @@ impl LabelSelector {
     }
 
     /// Check if the selector is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.match_labels.is_empty() && self.match_expressions.is_empty()
     }
@@ -582,11 +622,13 @@ pub struct FieldSelector {
 
 impl FieldSelector {
     /// Create a new empty field selector.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Add an equality condition.
+    #[must_use]
     pub fn equals(mut self, field: impl Into<String>, value: impl Into<String>) -> Self {
         self.conditions.push(FieldCondition {
             field: field.into(),
@@ -597,6 +639,7 @@ impl FieldSelector {
     }
 
     /// Add a not-equals condition.
+    #[must_use]
     pub fn not_equals(mut self, field: impl Into<String>, value: impl Into<String>) -> Self {
         self.conditions.push(FieldCondition {
             field: field.into(),
@@ -607,10 +650,11 @@ impl FieldSelector {
     }
 
     /// Convert to field selector string.
+    #[must_use]
     pub fn to_selector_string(&self) -> String {
         self.conditions
             .iter()
-            .map(|c| c.to_string())
+            .map(std::string::ToString::to_string)
             .collect::<Vec<_>>()
             .join(",")
     }
@@ -693,10 +737,10 @@ mod tests {
     fn test_auth_config_validation() {
         assert!(AuthConfig::None.validate().is_ok());
         assert!(AuthConfig::bearer_token("my-token").validate().is_ok());
-        assert!(AuthConfig::Token("".to_string()).validate().is_err());
+        assert!(AuthConfig::Token(String::new()).validate().is_err());
 
         let oidc = AuthConfig::Oidc {
-            issuer_url: "".to_string(),
+            issuer_url: String::new(),
             client_id: "test".to_string(),
             refresh_token: None,
         };
@@ -761,7 +805,7 @@ mod tests {
 
         let invalid = K8sConfig {
             cluster: ClusterConfig {
-                api_server_url: "".to_string(),
+                api_server_url: String::new(),
                 ..Default::default()
             },
             ..Default::default()

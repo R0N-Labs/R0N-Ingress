@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::tempdir;
 
-/// A test module that implements the ModuleContract.
+/// A test module that implements the `ModuleContract`.
 struct TestModule {
     name: String,
     status: ModuleStatus,
@@ -117,7 +117,7 @@ impl MessageHandler for ModuleHandler {
             },
             ControlCommand::Status => {
                 let status = module.status();
-                let payload = format!("{}", status).into_bytes();
+                let payload = format!("{status}").into_bytes();
                 ControlResponse::ok_with_payload(message.id, payload)
             },
             ControlCommand::Metrics => {

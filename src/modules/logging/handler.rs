@@ -1,4 +1,4 @@
-//! Logging module handler (ModuleContract implementation)
+//! Logging module handler (`ModuleContract` implementation)
 
 use super::config::{LoggingConfig, OutputType};
 use super::error::{LogError, LogResult};
@@ -58,6 +58,10 @@ pub struct LoggingMetrics {
 
 impl LoggingHandler {
     /// Create a new logging handler
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the handler cannot be initialized (e.g., invalid output config).
     pub fn new(config: LoggingConfig) -> LogResult<Self> {
         let redactor = Arc::new(Redactor::new(config.redaction.clone())?);
 
@@ -115,6 +119,10 @@ impl LoggingHandler {
     }
 
     /// Log an entry
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to any output fails.
     pub fn log(&mut self, entry: &LogEntry) -> LogResult<()> {
         if !self.config.enabled {
             return Ok(());
@@ -140,31 +148,55 @@ impl LoggingHandler {
     }
 
     /// Log an info message
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails.
     pub fn info(&mut self, message: &str) -> LogResult<()> {
         self.log(&LogEntry::info(message))
     }
 
     /// Log a debug message
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails.
     pub fn debug(&mut self, message: &str) -> LogResult<()> {
         self.log(&LogEntry::debug(message))
     }
 
     /// Log a warning message
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails.
     pub fn warn(&mut self, message: &str) -> LogResult<()> {
         self.log(&LogEntry::warn(message))
     }
 
     /// Log an error message
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails.
     pub fn error(&mut self, message: &str) -> LogResult<()> {
         self.log(&LogEntry::error(message))
     }
 
     /// Log a trace message
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails.
     pub fn trace(&mut self, message: &str) -> LogResult<()> {
         self.log(&LogEntry::trace(message))
     }
 
     /// Flush all outputs
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if flushing fails.
     pub fn flush(&mut self) -> LogResult<()> {
         self.outputs.flush()?;
         self.metrics.flush_count += 1;
@@ -172,16 +204,19 @@ impl LoggingHandler {
     }
 
     /// Get the redactor
+    #[must_use]
     pub fn redactor(&self) -> &Arc<Redactor> {
         &self.redactor
     }
 
     /// Get output count
+    #[must_use]
     pub fn output_count(&self) -> usize {
         self.outputs.count()
     }
 
     /// Get current metrics
+    #[must_use]
     pub fn get_metrics(&self) -> &LoggingMetrics {
         &self.metrics
     }
@@ -250,6 +285,7 @@ impl ModuleContract for LoggingHandler {
         self.status.clone()
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn metrics(&self) -> MetricsPayload {
         let mut payload = MetricsPayload::new();
 
@@ -271,6 +307,10 @@ impl ModuleContract for LoggingHandler {
 pub type SharedLoggingHandler = Arc<RwLock<LoggingHandler>>;
 
 /// Create a memory-based logger for testing
+///
+/// # Errors
+///
+/// Returns an error if the redactor cannot be created.
 pub fn create_test_logger() -> LogResult<(LoggingHandler, Arc<MemoryOutput>)> {
     let config = LoggingConfig::default();
     let redactor = Arc::new(Redactor::disabled());
