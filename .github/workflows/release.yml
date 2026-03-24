@@ -121,12 +121,18 @@ jobs:
           cd artifacts
           find . -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > ../SHA256SUMS
 
-      - name: Create Release
+      - name: Create Draft Release
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           generate_release_notes: true
           prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
             SHA256SUMS
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
