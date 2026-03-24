@@ -1,6 +1,6 @@
 [package]
 name = "R0N-Ingress"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.4"
 edition = "2021"
 description = "High-performance, protocol-agnostic ingress controller for routing and managing traffic"
 license = "Apache-2.0"
