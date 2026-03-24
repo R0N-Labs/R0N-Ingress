@@ -116,23 +116,29 @@ jobs:
         with:
           path: artifacts
 
-      - name: Generate checksums
+      - name: Collect release assets
         run: |
-          cd artifacts
-          find . -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec sha256sum {} \; | sed 's|  \./[^/]*/|  |' > ../SHA256SUMS
+          mkdir -p dist
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} dist/ \;
+          cd dist && sha256sum * > SHA256SUMS
 
-      - name: Create Draft Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
-          files: |
-            artifacts/**/*.tar.gz
-            artifacts/**/*.zip
-            SHA256SUMS
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRERELEASE_FLAG=""
+          if [[ "${{ needs.validate.outputs.is_prerelease }}" == "true" ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --draft \
+            $PRERELEASE_FLAG \
+            --generate-notes \
+            --notes-start-tag "$(git tag --sort=-v:refname | grep -v "${{ github.ref_name }}" | head -1)" \
+            dist/*
 
-      - name: Publish Release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
